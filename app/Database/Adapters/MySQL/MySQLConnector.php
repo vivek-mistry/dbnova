@@ -25,11 +25,11 @@ class MySQLConnector
      */
     public function connect(string $username, string $password, array $options = []): PDO
     {
-        return new PDO($this->dsn(), $username, $password, [
+        // PDO attributes are integer keys: array_replace keeps them, whereas `...` would renumber them.
+        return new PDO($this->dsn(), $username, $password, array_replace([
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_TIMEOUT => config()->integer('dbnova.connection.connect_timeout'),
-            ...$options,
-        ]);
+        ], $options));
     }
 
     /**

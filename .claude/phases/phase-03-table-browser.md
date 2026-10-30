@@ -1,6 +1,6 @@
 # Phase 3 — Table browser & data grid
 
-**Status:** in progress (3b) · 3a done
+**Status:** done
 **Goal:** Fast browsing of very large tables with server-side pagination, a virtualized grid, and inline record editing.
 **New dependencies (approved 2026-10-30):** `@tanstack/vue-table@^9.3.1`, `@tanstack/vue-virtual@^3.13.50`. Table v9 is a new major: read `node_modules/@tanstack/vue-table/skills/` before using it.
 **Read first:** `docs/PERFORMANCE.md`, `docs/DESIGN.md` (data grid), the `dbnova-data-grid` skill.
@@ -20,30 +20,31 @@
 - [x] `pages/tables/Browse.vue`, `pages/tables/Structure.vue` (columns, indexes, CREATE statement), `components/table/TableHeader.vue` (tabs + breadcrumbs; renamed from TableTabs)
 - [x] Sidebar tree tables and database page table names link to the browser
 - [x] `MySQLConnection::useCredentials()` for CLI and jobs (needed by the stress command, and by Phases 6 and 7)
-- [x] Stress fixture: `dbnova:stress:seed-table` (10M rows into `dbnova_test_stress`, run as the `dbnova_test` user). It refuses non-`dbnova_test_` targets. **Not run yet: waiting on the test user**
+- [x] Stress fixture: `dbnova:stress:seed-table` (10M rows into `dbnova_test_stress`, run as the `dbnova_test` user). It refuses non-`dbnova_test_` targets. Ran: 10M rows in about 7 minutes
 
 ### Tests (3a)
 
 - [x] Unit: page query builder (keyset/offset, composite keys, direction, filters, NULL operators, injection through column names)
 - [x] Feature: controllers (404 for an unknown table, validation of sort/filter/limit, cursor round-trip, JSON shapes)
-- [x] Integration: keyset pages are consistent and non-overlapping, descending pages, filters/counts, offset fallback for keyless tables, truncation/binary handling. **Skipped locally until the test user exists**
-- [ ] Benchmark: first + deep page on 10M rows. ⏳ Waiting on the test user + stress seed. Measured on a real 1.2M-row table instead (PERFORMANCE.md)
+- [x] Integration: keyset pages are consistent and non-overlapping, descending pages, filters/counts, offset fallback for keyless tables, truncation/binary handling. Ran against real MySQL as `dbnova_test`: passing
+- [x] Benchmark: first + deep page on 10M rows. Page 1: 1.4 ms query, deep page (id > 9.9M): 1.4 ms, peak memory 46.5 MB (PERFORMANCE.md)
 
 ## 3b — Edit
 
-- [ ] `RecordController`: insert, update (by PK/unique key), delete (single + bulk). Rejected for tables without a key. Audited, and blocked in read-only mode
-- [ ] Inline cell editing (`CellEditor.vue`) with optimistic update + rollback, insert row form, row selection + bulk delete
-- [ ] Command palette (Cmd/Ctrl+K) to jump to a database or table
+- [x] `RecordController`: insert, update (by PK/unique key), delete (single + bulk). Rejected for tables without a key. Audited, and blocked in read-only mode
+- [x] Inline cell editing (`CellEditor.vue`: double-click, Enter/blur saves, Esc cancels, NULL button) with optimistic update + rollback through `useRecordEditor`, `InsertRowDialog.vue` (Default / NULL / Value per column), row checkboxes + `DeleteRowsDialog.vue`
+- [x] `CommandPalette.vue` (Cmd/Ctrl+K): pages and databases, and `database.` lists that database's tables
 
 ### Tests (3b)
 
-- [ ] Feature: editing a keyless table is refused, read-only is enforced, audit is written
-- [ ] Integration: update/delete only touch the targeted row
+- [x] Feature (`RecordControllerTest`): insert/update/delete, audit holds column names only (never values), '' and surrounding spaces reach MySQL unchanged, 422 for MySQL/read-only errors, validation, guests refused
+- [x] `MySQLRecordManagerTest` (mocked connection): read-only, keyless refusal, binary/generated/unknown columns, UPDATE … LIMIT 1, row gone, key edit, transactional chunked delete, default inserts
+- [x] Integration: update/delete only touch the targeted row, unchanged value still saves (FOUND_ROWS), deleted row reported, NULL vs '' on insert, constraint message. Ran against real MySQL as `dbnova_test`: passing
 
 ## Acceptance criteria
 
-- A 10M-row table: first and deep pages each ≤ ~200 ms on suitable hardware, and PHP memory is flat (recorded in PERFORMANCE.md).
-- Edits save without a page reload, and failed edits roll back in the UI with the MySQL message. (3b)
+- A 10M-row table: first and deep pages each ≤ ~200 ms on suitable hardware, and PHP memory is flat. ✅ 1.4 ms / 1.4 ms query, 46.5 MB peak (PERFORMANCE.md).
+- Edits save without a page reload, and failed edits roll back in the UI with the MySQL message. ✅ (3b) `useRecordEditor` + `RecordControllerTest`. Browser check by the user still pending.
 - NULL vs empty string vs BLOB are visually distinct.
 
 ## Completion notes
@@ -65,3 +66,28 @@
     - No `v-html`. Every new route is behind `auth` + `EnsureMySQLCredentials`.
     - No findings.
 - **Deviation:** `TableTabs.vue` became `TableHeader.vue` (header + tabs + breadcrumbs).
+
+### 3b
+
+- **Shipped:**
+    - `RecordManagerInterface` + `MySQLRecordManager` (insert/update/delete by key, read-only guard, binary/generated columns refused, transactional chunked deletes)
+    - `TableBrowserInterface::row()`, `RecordController` (JSON; 422 with MySQL's reason)
+    - Inline editing, insert dialog, bulk delete, Cmd/Ctrl+K palette
+- **Found by a test and fixed:** Laravel's `TrimStrings` / `ConvertEmptyStringsToNull` run before routing, so the first route-name exemption never matched. `''` became NULL and spaces were trimmed. They now exempt by path (`databases/*/tables/*`).
+- **Found while building:**
+    - `PDO::MYSQL_ATTR_FOUND_ROWS` makes "saved the same value" count as a match.
+    - On PHP 8.4+ the constant comes from `Pdo\Mysql`, to avoid deprecation warnings on CI's PHP 8.5.
+- **Not verified yet:** no real-MySQL write has been run, deliberately. Writes are only tested against throwaway `dbnova_test_*` databases once the test user exists, and never against the user's real databases. The browser UI is still unchecked.
+- **Security self-review:**
+    - Column names are checked against the table, then quoted. Values and keys are bound.
+    - Every UPDATE has `LIMIT 1` + a full-key WHERE.
+    - Deletes need keys and are capped at 1,000 per request.
+    - Audit entries store column names / counts, never row values.
+    - Read-only mode is enforced in the adapter, and the UI hides edit controls.
+    - No findings.
+
+### Real-MySQL verification (user-created `dbnova_test` user, password `test`, limited to `dbnova_test` / `dbnova_test_*`)
+
+- All 19 integration tests pass, including the new end-to-end test (login → create DB → browse → filter → edit → insert → delete → rename → drop → audit trail) with nothing mocked.
+- **Critical bug found and fixed:** `MySQLConnector` merged PDO options with `...$options`. PHP renumbers integer keys on spread, so `MySQLConnection`'s options (native prepares, fetch mode, FOUND_ROWS) were silently never applied since Phase 2. Fixed with `array_replace`, and guarded by `MySQLConnectionIntegrationTest`. Before the fix, 2 of 17 real-MySQL tests fail; after it, all pass.
+- 10M-row benchmark recorded in PERFORMANCE.md.

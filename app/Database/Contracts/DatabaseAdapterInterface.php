@@ -18,4 +18,6 @@ interface DatabaseAdapterInterface
     public function schema(): SchemaManagerInterface;
 
     public function browser(): TableBrowserInterface;
+
+    public function records(): RecordManagerInterface;
 }

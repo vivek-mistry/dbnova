@@ -51,3 +51,5 @@
 - Keyset paging is used when the table has a PK (or NOT NULL unique key) and the grid is unsorted or sorted by the first key column. Deep pages then cost the same as page 1.
 - Sorting by any other column falls back to `LIMIT/OFFSET` with the key as a tiebreaker. Deep offsets on big tables get slow (1.4 s at offset 100k on 1.2M rows). The grid shows `keyset`/`offset` in its footer. Seek-paging on (sort column, key) is a possible later improvement.
 - Only the key, preview text (`LEFT(col, 257)`) and binary length (`OCTET_LENGTH`) are fetched for large columns, so wide TEXT/BLOB tables stay small on the wire.
+- Unindexed filters and sorts on 10M rows take seconds (MySQL has to scan or filesort). DBNova doesn't hide this. Follow-up for Phase 5: apply `max_execution_time` to browse queries and allow cancelling (`KILL QUERY`), so a slow sort can't hold a connection indefinitely.
+- Stress data: `php artisan dbnova:stress:seed-table` (10M rows in about 7 minutes on the dev Mac, as the `dbnova_test` user, into `dbnova_test_stress.orders`).

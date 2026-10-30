@@ -1,6 +1,7 @@
 <?php
 
 use App\Database\Contracts\DatabaseAdapterInterface;
+use App\Database\Contracts\RecordManagerInterface;
 use App\Database\Contracts\SchemaManagerInterface;
 use App\Database\Contracts\TableBrowserInterface;
 use App\Models\User;
@@ -73,21 +74,23 @@ function fakeSchemaManager(): MockInterface
 }
 
 /**
- * Replace the managed-database adapter with one whose schema manager and
- * table browser are mocks.
+ * Replace the managed-database adapter with one whose schema manager, table
+ * browser and record manager are mocks.
  *
- * @return array{schema: MockInterface, browser: MockInterface}
+ * @return array{schema: MockInterface, browser: MockInterface, records: MockInterface}
  */
 function fakeDatabaseAdapter(): array
 {
     $schema = Mockery::mock(SchemaManagerInterface::class);
     $browser = Mockery::mock(TableBrowserInterface::class);
+    $records = Mockery::mock(RecordManagerInterface::class);
 
     test()->mock(DatabaseAdapterInterface::class, fn (MockInterface $adapter) => $adapter
         ->shouldReceive('schema')->andReturn($schema)
-        ->shouldReceive('browser')->andReturn($browser));
+        ->shouldReceive('browser')->andReturn($browser)
+        ->shouldReceive('records')->andReturn($records));
 
-    return ['schema' => $schema, 'browser' => $browser];
+    return ['schema' => $schema, 'browser' => $browser, 'records' => $records];
 }
 
 /**

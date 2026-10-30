@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, usePage } from '@inertiajs/vue3';
 import DataGrid from '@/components/data-grid/DataGrid.vue';
 import TableHeader from '@/components/table/TableHeader.vue';
 import type { ColumnInfo, TableInfo, TablePage } from '@/types';
 
-defineProps<{
+const props = defineProps<{
     database: string;
     table: TableInfo;
     columns: ColumnInfo[];
@@ -12,6 +12,14 @@ defineProps<{
     pageSize: number;
     firstPage: TablePage;
 }>();
+
+const page = usePage();
+
+// Rows can be changed only in tables whose rows can be told apart by a key.
+const editable =
+    !page.props.dbnova.readOnly &&
+    props.table.type === 'table' &&
+    props.keyColumns.length > 0;
 </script>
 
 <template>
@@ -34,6 +42,7 @@ defineProps<{
             :page-size="pageSize"
             :first-page="firstPage"
             :approximate-rows="table.approximateRows"
+            :editable="editable"
         />
     </div>
 </template>

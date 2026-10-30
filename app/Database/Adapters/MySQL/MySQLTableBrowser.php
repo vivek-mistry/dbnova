@@ -4,6 +4,8 @@ namespace App\Database\Adapters\MySQL;
 
 use App\Database\Contracts\TableBrowserInterface;
 use App\Database\DTOs\ColumnInfo;
+use App\Database\DTOs\Filter;
+use App\Database\DTOs\FilterOperator;
 use App\Database\DTOs\IndexInfo;
 use App\Database\DTOs\Page;
 use App\Database\DTOs\PageRequest;
@@ -132,6 +134,25 @@ class MySQLTableBrowser implements TableBrowserInterface
             nextOffset: $query['strategy'] === 'offset' && $hasMore ? $request->offset + $limit : null,
             durationMs: $durationMs,
         );
+    }
+
+    public function row(TableRef $table, array $keyValues): ?array
+    {
+        $keyColumns = $this->keyColumns($table);
+
+        if ($keyColumns === [] || count($keyColumns) !== count($keyValues)) {
+            return null;
+        }
+
+        $filters = array_map(
+            fn (string $column, int|float|string|null $value): Filter => $value === null
+                ? new Filter($column, FilterOperator::IsNull)
+                : new Filter($column, FilterOperator::Equals, (string) $value),
+            $keyColumns,
+            $keyValues,
+        );
+
+        return $this->page($table, new PageRequest(limit: 1, filters: $filters))->rows[0] ?? null;
     }
 
     public function count(TableRef $table, array $filters = []): int

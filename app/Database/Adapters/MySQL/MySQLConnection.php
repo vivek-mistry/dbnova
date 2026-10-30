@@ -87,6 +87,52 @@ class MySQLConnection
     }
 
     /**
+     * Run an INSERT, UPDATE or DELETE and return the number of rows it matched.
+     *
+     * @param  list<mixed>  $bindings
+     *
+     * @throws DatabaseOperationException
+     */
+    public function affectingStatement(string $sql, array $bindings = []): int
+    {
+        try {
+            $statement = $this->pdo()->prepare($sql);
+            $statement->execute($bindings);
+
+            return $statement->rowCount();
+        } catch (PDOException $exception) {
+            throw DatabaseOperationException::fromPdoException($exception);
+        }
+    }
+
+    /**
+     * Run statements atomically. MyISAM tables ignore the transaction.
+     *
+     * @template TResult
+     *
+     * @param  callable(): TResult  $callback
+     * @return TResult
+     *
+     * @throws DatabaseOperationException
+     */
+    public function transaction(callable $callback): mixed
+    {
+        $pdo = $this->pdo();
+        $pdo->beginTransaction();
+
+        try {
+            $result = $callback();
+            $pdo->commit();
+
+            return $result;
+        } catch (\Throwable $exception) {
+            $pdo->rollBack();
+
+            throw $exception;
+        }
+    }
+
+    /**
      * Run a statement that returns no rows.
      *
      * @param  list<mixed>  $bindings
@@ -114,6 +160,8 @@ class MySQLConnection
                 PDO::ATTR_EMULATE_PREPARES => false,
                 PDO::ATTR_STRINGIFY_FETCHES => false,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                // UPDATE reports matched rows, so saving an unchanged value is not "row not found".
+                self::foundRowsAttribute() => true,
             ]);
         } catch (PDOException $exception) {
             throw DatabaseOperationException::fromPdoException($exception);
@@ -129,5 +177,15 @@ class MySQLConnection
         }
 
         return $pdo;
+    }
+
+    /**
+     * PHP 8.4 moved the MySQL PDO constants to Pdo\Mysql and deprecated the old names.
+     */
+    private static function foundRowsAttribute(): int
+    {
+        return defined('Pdo\Mysql::ATTR_FOUND_ROWS')
+            ? (int) constant('Pdo\Mysql::ATTR_FOUND_ROWS')
+            : PDO::MYSQL_ATTR_FOUND_ROWS;
     }
 }

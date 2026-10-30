@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
 import AppLogo from '@/components/AppLogo.vue';
+import CommandPalette from '@/components/CommandPalette.vue';
 import DatabaseTree from '@/components/database/DatabaseTree.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
@@ -40,5 +41,6 @@ import { dashboard } from '@/routes';
             <NavUser />
         </SidebarFooter>
     </Sidebar>
+    <CommandPalette />
     <slot />
 </template>

@@ -46,7 +46,7 @@ DBNova is effectively a superuser console for a MySQL server. Its threat model a
 
 ## Audit log
 
-`audit_logs` (SQLite) records the actor, action, database, table, SQL (truncated), result and IP. It covers every DDL, every DML from the grid or editor, imports, exports and drops.
+`audit_logs` (SQLite) records the actor (user + MySQL username), action, database, table, details, result (with the error) and IP. It covers every DDL, every row change from the grid, imports, exports and drops. **Row values are never stored**: row changes record column names and row counts only, because table data may be sensitive.
 
 ## Review checklist
 

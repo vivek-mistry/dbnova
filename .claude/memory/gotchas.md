@@ -19,4 +19,8 @@ Append entries during and at the end of each phase. Use the format `Phase N — 
 - Phase 3 — `@inertiajs/core` (where `HttpResponseError` lives) isn't a direct dependency and `@inertiajs/vue3` doesn't re-export it. — `lib/httpError.ts` duck-types `error.response.data` instead.
 - Phase 3 — `env()` outside `config/` returns null once config is cached. — Test credentials live in `config('dbnova.testing.*')`.
 - Phase 3 — oxlint `no-floating-promises` fails CI on fire-and-forget calls. — Prefix with `void` when the promise already handles its own errors.
+- Phase 3 — `TrimStrings` and `ConvertEmptyStringsToNull` are global middleware that run **before routing**, so `except` callbacks using `routeIs()` never match. — Exempt data routes by path: `$request->is('databases/*/tables/*')`.
+- Phase 3 — MySQL `UPDATE` reports 0 affected rows when the value didn't change. — `MySQLConnection` enables FOUND_ROWS (`Pdo\Mysql::ATTR_FOUND_ROWS` on PHP ≥ 8.4, `PDO::MYSQL_ATTR_FOUND_ROWS` before) so 0 really means "row not found".
+- Phase 3 — **Never merge PDO options with `...$options`**: PDO attributes are integer keys, and spread renumbers them, silently remapping options onto unrelated read-only attributes. Native prepares, fetch mode and FOUND_ROWS were never applied until real-MySQL tests caught it. — Use `array_replace($defaults, $options)`. `MySQLConnectionIntegrationTest` guards this.
+- Phase 3 — Mocked-connection tests can't catch driver-level behaviour (PDO options, FOUND_ROWS, autocommit). — Always run the real-MySQL integration tests before closing a phase that touches `app/Database`.
 - Phase 0 — `mysql` on PATH is a shell alias. — Always resolve binaries from config, never from `PATH` lookups that rely on the interactive shell.

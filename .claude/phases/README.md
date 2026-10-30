@@ -7,7 +7,7 @@ Status values: `not started` · `in progress` · `review` · `done`. Only **one*
 | 0   | Architecture, docs & `.claude/` workspace | done        | [phase-00-architecture.md](phase-00-architecture.md)         |
 | 1   | Foundation, layout & navigation           | done        | [phase-01-foundation.md](phase-01-foundation.md)             |
 | 2   | Adapter layer & database explorer         | done        | [phase-02-adapter-explorer.md](phase-02-adapter-explorer.md) |
-| 3   | Table browser & data grid                 | in progress | [phase-03-table-browser.md](phase-03-table-browser.md)       |
+| 3   | Table browser & data grid                 | done        | [phase-03-table-browser.md](phase-03-table-browser.md)       |
 | 4   | Schema management                         | not started | [phase-04-schema.md](phase-04-schema.md)                     |
 | 5   | SQL editor                                | not started | [phase-05-sql-editor.md](phase-05-sql-editor.md)             |
 | 6   | Large import engine                       | not started | [phase-06-import.md](phase-06-import.md)                     |

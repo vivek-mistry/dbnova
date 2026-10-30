@@ -53,6 +53,16 @@ interface TableBrowserInterface
     public function page(TableRef $table, PageRequest $request): Page;
 
     /**
+     * One row's cells, located by its key values, or null when it does not exist.
+     *
+     * @param  list<int|float|string|null>  $keyValues
+     * @return list<mixed>|null
+     *
+     * @throws DatabaseOperationException
+     */
+    public function row(TableRef $table, array $keyValues): ?array;
+
+    /**
      * Exact number of rows matching the filters.
      *
      * @param  list<Filter>  $filters

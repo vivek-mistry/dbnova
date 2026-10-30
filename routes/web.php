@@ -3,6 +3,7 @@
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\DatabaseTreeController;
+use App\Http\Controllers\RecordController;
 use App\Http\Controllers\SystemController;
 use App\Http\Controllers\TableController;
 use App\Http\Controllers\TableRowsController;
@@ -24,6 +25,9 @@ Route::middleware(['auth', EnsureMySQLCredentials::class])->group(function () {
         Route::get('rows', [TableRowsController::class, 'index'])->name('rows');
         Route::get('count', [TableRowsController::class, 'count'])->name('count');
         Route::get('value', [TableRowsController::class, 'value'])->name('value');
+        Route::post('records', [RecordController::class, 'store'])->name('records.store');
+        Route::patch('records', [RecordController::class, 'update'])->name('records.update');
+        Route::delete('records', [RecordController::class, 'destroy'])->name('records.destroy');
     });
 
     Route::get('database-tree', [DatabaseTreeController::class, 'index'])->name('database-tree.index');
