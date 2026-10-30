@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { usePage } from '@inertiajs/vue3';
+import { Lock } from '@lucide/vue';
 import Breadcrumbs from '@/components/Breadcrumbs.vue';
+import { Badge } from '@/components/ui/badge';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import type { BreadcrumbItem } from '@/types';
 
@@ -11,6 +14,8 @@ withDefaults(
         breadcrumbs: () => [],
     },
 );
+
+const page = usePage();
 </script>
 
 <template>
@@ -23,5 +28,14 @@ withDefaults(
                 <Breadcrumbs :breadcrumbs="breadcrumbs" />
             </template>
         </div>
+        <Badge
+            v-if="page.props.dbnova.readOnly"
+            variant="secondary"
+            class="ml-auto"
+            data-test="read-only-badge"
+        >
+            <Lock />
+            Read-only mode
+        </Badge>
     </header>
 </template>

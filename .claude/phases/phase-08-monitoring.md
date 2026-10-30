@@ -5,6 +5,7 @@
 **New dependencies (approval needed):** `apexcharts`, `vue3-apexcharts`.
 
 ## Tasks
+
 - [ ] Process list (`SHOW FULL PROCESSLIST` / `performance_schema`) with auto-refresh and kill (confirm + audit)
 - [ ] Server variables (searchable) and status counters
 - [ ] Dashboard charts: queries/sec, connections, InnoDB buffer pool usage (polled deltas)
@@ -14,12 +15,15 @@
 - [ ] User-facing settings page for DBNova preferences (page size, row cap, query timeout)
 
 ## Tests
+
 - [ ] Feature: kill requires confirmation and is audited, and read-only blocks kill and maintenance
 - [ ] Integration: the process list includes a running `SLEEP()`, and kill ends it
 
 ## Acceptance criteria
+
 - The process list refreshes without full page reloads, and kill works.
 - Maintenance operations report MySQL's result rows.
 
 ## Completion notes
+
 _(filled by /phase-done)_

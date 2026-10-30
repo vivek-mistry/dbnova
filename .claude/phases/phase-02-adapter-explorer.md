@@ -8,10 +8,12 @@
 ## Tasks
 
 ### Adapter foundation (`app/Database/`)
+
 - [ ] `Contracts/*` interfaces (see DATABASE_ADAPTERS.md). For now, only the methods used in this phase get implementations, and the rest are declared
 - [ ] `Support/IdentifierQuoter`, `Support/ReadOnlyGuard`
 - [ ] `Processes/ProcessRunner`, `ProcessResult`, `DefaultsFile`
-- [ ] `Adapters/MySQL/MySQLConnection` (lazy PDO, options per the doc, `useDatabase()`)
+- [ ] `Adapters/MySQL/MySQLConnection` (lazy PDO built with `MySQLConnector` + the signed-in user's `MySQLCredentialStore` credentials (ADR 0008), options per the doc, `useDatabase()`)
+- [ ] `DefaultsFile` for the CLI takes the signed-in user's credentials, not config
 - [ ] `Adapters/MySQL/MySQLAdapter`, `MySQLServerInspector`, `MySQLSchemaManager`
 - [ ] `DTOs/ServerInfo`, `DatabaseInfo`, `TableInfo`
 - [ ] `Exceptions/DatabaseOperationException` with friendly message mapping
@@ -19,15 +21,18 @@
 - [ ] Refactor Phase 1's MySQL reachability check to use the adapter
 
 ### Audit log (moved earlier from Phase 8)
+
 - [ ] `AuditLog` model + migration + factory, plus an `AuditLogger` service
 
 ### Explorer features
+
 - [ ] `DatabaseController`: index (list with size, table count, collation), store (create with charset/collation), destroy (typed confirmation + password confirm), rename (create + `RENAME TABLE` loop)
 - [ ] Sidebar database tree: lazy-load tables per database (`useHttp`), with a filter box
 - [ ] `pages/databases/Index.vue`, `pages/databases/Show.vue` (table list with rows, size, engine, collation)
 - [ ] Dashboard shows live `ServerInfo` (deferred prop + skeleton)
 
 ### Tests & CI
+
 - [ ] Unit: `IdentifierQuoter`, `DefaultsFile` (0600, deleted afterwards), `ReadOnlyGuard`
 - [ ] Feature (fake adapter): controllers, validation, read-only blocks create/drop, audit entries written
 - [ ] Integration (`DBNOVA_TEST_MYSQL=1`): create/list/drop `dbnova_test_*`
@@ -35,10 +40,12 @@
 - [ ] Add a MySQL service to `.github/workflows/tests.yml`
 
 ## Acceptance criteria
+
 - The dashboard shows real server version, uptime, database count and total size.
 - Databases can be created, renamed and dropped from the UI, and each action is audited.
 - Read-only mode blocks mutations at the adapter level.
 - The architecture test proves there's no DB facade use against the managed server.
 
 ## Completion notes
+
 _(filled by /phase-done)_

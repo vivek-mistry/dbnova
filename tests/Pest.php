@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\User;
+use App\Services\Auth\MySQLCredentialStore;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -44,7 +46,16 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
+/**
+ * Sign in as a DBNova user whose session holds MySQL credentials, as it
+ * would after a successful login.
+ */
+function actingAsMySqlUser(?User $user = null, string $password = 'secret'): User
 {
-    // ..
+    $user ??= User::factory()->create();
+
+    test()->actingAs($user)->withSession([]);
+    app(MySQLCredentialStore::class)->store($user->username, $password);
+
+    return $user;
 }

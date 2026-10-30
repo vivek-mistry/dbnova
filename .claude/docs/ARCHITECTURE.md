@@ -65,15 +65,15 @@ resources/js/
 
 ## Decisions (summary — details and alternatives are in `adr/`)
 
-| # | Decision | Alternatives considered | Why |
-|---|---|---|---|
-| 0001 | Raw PDO for interactive work, CLI for bulk | CLI-only. Laravel DB connection | Keeps types and exact NULLs, unbuffered cursors, no process spawn per request. The CLI streams huge dumps best. A Laravel connection would tie the managed server to app config and invite misuse |
-| 0002 | SQLite for app metadata | Store metadata in the managed MySQL. Separate MySQL schema | Must survive when the managed server is broken or being re-imported. Zero setup |
-| 0003 | Database queue driver | Redis (spec default). Sync | No extra service or package. A single operator doesn't need Redis throughput. Redis stays an `.env` switch |
-| 0004 | Single admin, registration off | Multi-user. Roles | Smallest attack surface for a superuser tool |
-| 0005 | Polling for progress | Reverb / websockets. SSE | No extra daemon. Inertia v3 `usePoll` is built in |
-| 0006 | Token-aware streaming import with single-database enforcement | Regex rewriting. Importing blindly | Regex breaks on strings and comments. Blind imports can write to the wrong DB |
-| 0007 | Committed `.claude/` workspace | Docs in `docs/` only | Shared Claude context, skills and phase workflow for every session |
+| #    | Decision                                                      | Alternatives considered                                       | Why                                                                                                                                                                                               |
+| ---- | ------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0001 | Raw PDO for interactive work, CLI for bulk                    | CLI-only. Laravel DB connection                               | Keeps types and exact NULLs, unbuffered cursors, no process spawn per request. The CLI streams huge dumps best. A Laravel connection would tie the managed server to app config and invite misuse |
+| 0002 | SQLite for app metadata                                       | Store metadata in the managed MySQL. Separate MySQL schema    | Must survive when the managed server is broken or being re-imported. Zero setup                                                                                                                   |
+| 0003 | Database queue driver                                         | Redis (spec default). Sync                                    | No extra service or package. A single operator doesn't need Redis throughput. Redis stays an `.env` switch                                                                                        |
+| 0008 | Sign in with a MySQL account (supersedes 0004)                | App admin + creds in `.env`. Custom guard without users table | MySQL grants decide access, like phpMyAdmin. Fortify login/throttling reused                                                                                                                      |
+| 0005 | Polling for progress                                          | Reverb / websockets. SSE                                      | No extra daemon. Inertia v3 `usePoll` is built in                                                                                                                                                 |
+| 0006 | Token-aware streaming import with single-database enforcement | Regex rewriting. Importing blindly                            | Regex breaks on strings and comments. Blind imports can write to the wrong DB                                                                                                                     |
+| 0007 | Committed `.claude/` workspace                                | Docs in `docs/` only                                          | Shared Claude context, skills and phase workflow for every session                                                                                                                                |
 
 ## Request flows
 
@@ -84,8 +84,9 @@ resources/js/
 **Export:** `ExportDatabaseJob` → `mysqldump` stdout is streamed (optionally gzipped) to a temp file → signed, expiring download.
 
 ## Configuration (`config/dbnova.php`, Phase 1)
+
 ```
-connection: host, port, socket, username, password, charset (utf8mb4)
+connection: host, port, socket, charset (utf8mb4), connect_timeout   # no credentials: users sign in with MySQL accounts
 binaries: mysql, mysqldump
 paths: uploads, imports, exports (under storage/app/dbnova)
 limits: upload_chunk_bytes, pump_chunk_bytes, query_row_cap, query_timeout_ms, page_size
@@ -94,5 +95,6 @@ read_only: bool
 ```
 
 ## Error handling & logging
+
 - A dedicated `dbnova` log channel. MySQL errors are wrapped in `DatabaseOperationException` (SQLSTATE, driver code, message) and mapped to friendly UI messages.
 - Credentials are never put in exceptions, logs or job payloads.

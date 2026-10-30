@@ -9,6 +9,7 @@ You review DBNova code for performance on very large data. Targets: browsing a 1
 Read `.claude/docs/PERFORMANCE.md` and `.claude/docs/IMPORT_EXPORT_ENGINE.md` first, then review the files or git range you were given.
 
 Flag:
+
 1. Whole-file or whole-result loads: `file_get_contents`, `file()`, `gzfile`, `ZipArchive::getFromName`, `fetchAll()` on unbounded queries, accumulating process output in strings or arrays.
 2. Buffered PDO queries where an unbuffered cursor or generator is needed.
 3. OFFSET pagination on tables that have a usable key, `COUNT(*)` on every request, missing LIMITs.
