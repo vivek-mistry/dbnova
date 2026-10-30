@@ -23,3 +23,4 @@ Newest entries go at the bottom. Use the format `YYYY-MM-DD — Decision — Why
 - 2026-10-30 — Integration tests use a dedicated MySQL user limited to `dbnova\_test\_%`, with credentials in `.env` (`DBNOVA_TEST_DB_*`). CI uses a throwaway `mysql:8.0` container. — The user chose it. — —
 - 2026-10-30 — Dropping a database asks for the typed name + MySQL password in one dialog (not Fortify's redirecting `password.confirm`, which can't replay a DELETE). — UX + safety. — ADR 0008
 - 2026-10-30 — Adapter contracts grow per phase instead of declaring unimplemented methods up front. — There's no dead code, and each phase owns its contract. — ADR 0001
+- 2026-10-30 — Approved and installed `@tanstack/vue-table@^9.3.1` + `@tanstack/vue-virtual@^3.13.50`. Table v9 API (`useTable`, `tableFeatures`): use the guides in `node_modules/@tanstack/vue-table/skills/`. Phase 3 is split into 3a (browse) and 3b (edit). The stress table goes in `dbnova_test_stress`. — The user chose it. — —

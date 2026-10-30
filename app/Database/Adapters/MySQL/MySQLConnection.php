@@ -16,10 +16,30 @@ class MySQLConnection
 {
     private ?PDO $pdo = null;
 
+    /**
+     * Credentials that override the session's, for CLI commands and queued jobs.
+     *
+     * @var array{username: string, password: string}|null
+     */
+    private ?array $explicitCredentials = null;
+
     public function __construct(
         private MySQLConnector $connector,
         private MySQLCredentialStore $credentials,
     ) {}
+
+    /**
+     * Connect as the given MySQL account instead of the signed-in user.
+     *
+     * @param  array{username: string, password: string}  $credentials
+     */
+    public function useCredentials(array $credentials): static
+    {
+        $this->explicitCredentials = $credentials;
+        $this->pdo = null;
+
+        return $this;
+    }
 
     /**
      * @throws DatabaseOperationException
@@ -87,7 +107,7 @@ class MySQLConnection
      */
     private function open(): PDO
     {
-        $credentials = $this->credentials->get() ?? throw new NotSignedInException;
+        $credentials = $this->explicitCredentials ?? $this->credentials->get() ?? throw new NotSignedInException;
 
         try {
             $pdo = $this->connector->connect($credentials['username'], $credentials['password'], [

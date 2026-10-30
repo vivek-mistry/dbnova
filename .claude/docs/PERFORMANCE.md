@@ -34,10 +34,20 @@
 
 ## Benchmarks (filled in during Phases 3, 6, 7, 9)
 
-| Scenario                              | Target         | Measured | Hardware | Date |
-| ------------------------------------- | -------------- | -------- | -------- | ---- |
-| Browse 10M rows, page 1               | ≤ 200 ms       | —        | —        | —    |
-| Browse 10M rows, page 50,000 (keyset) | ≤ 200 ms       | —        | —        | —    |
-| Import 10 GB `.sql`                   | memory ≤ 64 MB | —        | —        | —    |
-| Import 10 GB `.sql.gz`                | memory ≤ 64 MB | —        | —        | —    |
-| Export 5 GB DB `.sql.gz`              | memory ≤ 64 MB | —        | —        | —    |
+| Scenario                                                        | Target         | Measured                                                        | Hardware              | Date       |
+| --------------------------------------------------------------- | -------------- | --------------------------------------------------------------- | --------------------- | ---------- |
+| Browse 10M rows, page 1                                         | ≤ 200 ms       | pending (needs `dbnova_test` user → `dbnova:stress:seed-table`) | —                     | —          |
+| Browse 1.2M rows (`ecommerce.product_images`), page 1, 100 rows | ≤ 200 ms       | 9.7 ms query                                                    | dev Mac, MySQL 8.0.39 | 2026-10-30 |
+| Same table, page 51 (keyset)                                    | ≤ 200 ms       | 0.2 ms query                                                    | dev Mac               | 2026-10-30 |
+| Same table, 1,000-row page as JSON                              | —              | 1.8 ms query, 192 KB JSON, 46.5 MB peak PHP memory              | dev Mac               | 2026-10-30 |
+| Same table sorted by a non-key column, OFFSET 100,000           | known slow     | 1,403 ms (offset fallback)                                      | dev Mac               | 2026-10-30 |
+| Browse 10M rows, page 50,000 (keyset)                           | ≤ 200 ms       | —                                                               | —                     | —          |
+| Import 10 GB `.sql`                                             | memory ≤ 64 MB | —                                                               | —                     | —          |
+| Import 10 GB `.sql.gz`                                          | memory ≤ 64 MB | —                                                               | —                     | —          |
+| Export 5 GB DB `.sql.gz`                                        | memory ≤ 64 MB | —                                                               | —                     | —          |
+
+### Notes from Phase 3a
+
+- Keyset paging is used when the table has a PK (or NOT NULL unique key) and the grid is unsorted or sorted by the first key column. Deep pages then cost the same as page 1.
+- Sorting by any other column falls back to `LIMIT/OFFSET` with the key as a tiebreaker. Deep offsets on big tables get slow (1.4 s at offset 100k on 1.2M rows). The grid shows `keyset`/`offset` in its footer. Seek-paging on (sort column, key) is a possible later improvement.
+- Only the key, preview text (`LEFT(col, 257)`) and binary length (`OCTET_LENGTH`) are fetched for large columns, so wide TEXT/BLOB tables stay small on the wire.

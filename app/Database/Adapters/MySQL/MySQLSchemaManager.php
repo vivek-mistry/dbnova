@@ -39,22 +39,43 @@ class MySQLSchemaManager implements SchemaManagerInterface
 
     public function tables(string $database): array
     {
-        $rows = $this->connection->select(
+        return array_map($this->toTableInfo(...), $this->tableRows($database));
+    }
+
+    public function table(string $database, string $table): ?TableInfo
+    {
+        $row = $this->tableRows($database, $table)[0] ?? null;
+
+        return $row === null ? null : $this->toTableInfo($row);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function tableRows(string $database, ?string $table = null): array
+    {
+        return $this->connection->select(
             'SELECT TABLE_NAME, TABLE_TYPE, ENGINE, TABLE_ROWS, DATA_LENGTH + INDEX_LENGTH AS SIZE_BYTES, TABLE_COLLATION
             FROM information_schema.TABLES
-            WHERE TABLE_SCHEMA = ?
+            WHERE TABLE_SCHEMA = ?'.($table === null ? '' : ' AND TABLE_NAME = ?').'
             ORDER BY TABLE_NAME',
-            [$database],
+            $table === null ? [$database] : [$database, $table],
         );
+    }
 
-        return array_map(fn (array $row): TableInfo => new TableInfo(
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function toTableInfo(array $row): TableInfo
+    {
+        return new TableInfo(
             name: (string) $row['TABLE_NAME'],
             type: $row['TABLE_TYPE'] === 'VIEW' ? 'view' : 'table',
             engine: $row['ENGINE'] === null ? null : (string) $row['ENGINE'],
             approximateRows: $row['TABLE_ROWS'] === null ? null : (int) $row['TABLE_ROWS'],
             sizeBytes: $row['SIZE_BYTES'] === null ? null : (int) $row['SIZE_BYTES'],
             collation: $row['TABLE_COLLATION'] === null ? null : (string) $row['TABLE_COLLATION'],
-        ), $rows);
+        );
     }
 
     public function collations(): array

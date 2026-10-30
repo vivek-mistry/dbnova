@@ -2,6 +2,7 @@
 
 use App\Database\Contracts\DatabaseAdapterInterface;
 use App\Database\Contracts\SchemaManagerInterface;
+use App\Database\Contracts\TableBrowserInterface;
 use App\Models\User;
 use App\Services\Auth\MySQLCredentialStore;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -68,13 +69,25 @@ function actingAsMySqlUser(?User $user = null, string $password = 'secret'): Use
  */
 function fakeSchemaManager(): MockInterface
 {
+    return fakeDatabaseAdapter()['schema'];
+}
+
+/**
+ * Replace the managed-database adapter with one whose schema manager and
+ * table browser are mocks.
+ *
+ * @return array{schema: MockInterface, browser: MockInterface}
+ */
+function fakeDatabaseAdapter(): array
+{
     $schema = Mockery::mock(SchemaManagerInterface::class);
+    $browser = Mockery::mock(TableBrowserInterface::class);
 
     test()->mock(DatabaseAdapterInterface::class, fn (MockInterface $adapter) => $adapter
-        ->shouldReceive('schema')
-        ->andReturn($schema));
+        ->shouldReceive('schema')->andReturn($schema)
+        ->shouldReceive('browser')->andReturn($browser));
 
-    return $schema;
+    return ['schema' => $schema, 'browser' => $browser];
 }
 
 /**
@@ -85,9 +98,9 @@ function fakeSchemaManager(): MockInterface
  */
 function mySqlTestCredentials(): ?array
 {
-    $username = env('DBNOVA_TEST_DB_USERNAME');
+    $username = config('dbnova.testing.username');
 
     return is_string($username) && $username !== ''
-        ? ['username' => $username, 'password' => (string) env('DBNOVA_TEST_DB_PASSWORD', '')]
+        ? ['username' => $username, 'password' => (string) config('dbnova.testing.password')]
         : null;
 }

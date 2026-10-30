@@ -16,4 +16,6 @@ interface DatabaseAdapterInterface
     public function server(): ServerInspectorInterface;
 
     public function schema(): SchemaManagerInterface;
+
+    public function browser(): TableBrowserInterface;
 }

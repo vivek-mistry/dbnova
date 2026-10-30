@@ -100,4 +100,19 @@ return [
 
     'read_only' => (bool) env('DBNOVA_READ_ONLY', false),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Test Account
+    |--------------------------------------------------------------------------
+    |
+    | A MySQL account limited to `dbnova\_test\_%` databases, used by the
+    | integration tests and the stress-data commands. Leave empty to skip them.
+    |
+    */
+
+    'testing' => [
+        'username' => env('DBNOVA_TEST_DB_USERNAME'),
+        'password' => env('DBNOVA_TEST_DB_PASSWORD', ''),
+    ],
+
 ];

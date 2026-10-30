@@ -12,18 +12,20 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
     SidebarMenuSub,
+    SidebarMenuSubButton,
     SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
 import { useCurrentUrl } from '@/composables/useCurrentUrl';
 import { tables as treeTables } from '@/routes/database-tree';
 import { show } from '@/routes/databases';
+import { show as tableShow } from '@/routes/tables';
 import type { DatabaseTreeNode, DatabaseTreeTable } from '@/types';
 
 const props = defineProps<{
     database: DatabaseTreeNode;
 }>();
 
-const { isCurrentUrl } = useCurrentUrl();
+const { isCurrentUrl, isCurrentOrParentUrl } = useCurrentUrl();
 
 const open = ref(false);
 const tables = ref<DatabaseTreeTable[] | null>(null);
@@ -81,17 +83,32 @@ watch(open, async (isOpen) => {
                     <SidebarMenuSubItem
                         v-for="table in tables ?? []"
                         :key="table.name"
-                        class="flex items-center gap-2 px-2 py-1 text-xs"
                     >
-                        <Eye
-                            v-if="table.type === 'view'"
-                            class="size-3.5 shrink-0 text-muted-foreground"
-                        />
-                        <Table2
-                            v-else
-                            class="size-3.5 shrink-0 text-muted-foreground"
-                        />
-                        <span class="truncate">{{ table.name }}</span>
+                        <SidebarMenuSubButton
+                            as-child
+                            size="sm"
+                            :is-active="
+                                isCurrentOrParentUrl(
+                                    tableShow({
+                                        database: database.name,
+                                        table: table.name,
+                                    }),
+                                )
+                            "
+                        >
+                            <Link
+                                :href="
+                                    tableShow({
+                                        database: database.name,
+                                        table: table.name,
+                                    })
+                                "
+                            >
+                                <Eye v-if="table.type === 'view'" />
+                                <Table2 v-else />
+                                <span class="truncate">{{ table.name }}</span>
+                            </Link>
+                        </SidebarMenuSubButton>
                     </SidebarMenuSubItem>
                 </SidebarMenuSub>
             </CollapsibleContent>

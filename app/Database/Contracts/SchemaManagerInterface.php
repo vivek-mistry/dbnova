@@ -33,6 +33,11 @@ interface SchemaManagerInterface
     public function tables(string $database): array;
 
     /**
+     * @throws DatabaseOperationException
+     */
+    public function table(string $database, string $table): ?TableInfo;
+
+    /**
      * @return list<CollationInfo>
      *
      * @throws DatabaseOperationException

@@ -17,7 +17,7 @@ Read `.claude/docs/PERFORMANCE.md` and the "Data grid" section of `.claude/docs/
 
 ## Client side
 
-- `@tanstack/vue-table` in **manual** mode (`manualPagination`, `manualSorting`, `manualFiltering`).
+- `@tanstack/vue-table` **v9**: `useTable` + `tableFeatures({ columnSizingFeature, columnResizingFeature })`. Sorting, filtering and paging are server-side, so those features aren't registered (see `components/data-grid/DataGrid.vue`). Read `node_modules/@tanstack/vue-table/skills/` before adding features.
 - `@tanstack/vue-virtual` for rows (and for columns when there are more than 50).
 - Store rows in `shallowRef` and replace or append arrays. Don't deep-watch them.
 - Cells render text only (no `v-html`). NULL, empty and BLOB each have distinct components.

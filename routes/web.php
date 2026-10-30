@@ -4,6 +4,8 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\DatabaseTreeController;
 use App\Http\Controllers\SystemController;
+use App\Http\Controllers\TableController;
+use App\Http\Controllers\TableRowsController;
 use App\Http\Middleware\EnsureMySQLCredentials;
 use Illuminate\Support\Facades\Route;
 
@@ -15,6 +17,14 @@ Route::middleware(['auth', EnsureMySQLCredentials::class])->group(function () {
     Route::resource('databases', DatabaseController::class)
         ->only(['index', 'store', 'show', 'update', 'destroy'])
         ->parameters(['databases' => 'database']);
+
+    Route::prefix('databases/{database}/tables/{table}')->name('tables.')->group(function () {
+        Route::get('/', [TableController::class, 'show'])->name('show');
+        Route::get('structure', [TableController::class, 'structure'])->name('structure');
+        Route::get('rows', [TableRowsController::class, 'index'])->name('rows');
+        Route::get('count', [TableRowsController::class, 'count'])->name('count');
+        Route::get('value', [TableRowsController::class, 'value'])->name('value');
+    });
 
     Route::get('database-tree', [DatabaseTreeController::class, 'index'])->name('database-tree.index');
     Route::get('database-tree/{database}', [DatabaseTreeController::class, 'tables'])->name('database-tree.tables');

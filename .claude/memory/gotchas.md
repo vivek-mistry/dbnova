@@ -14,4 +14,9 @@ Append entries during and at the end of each phase. Use the format `Phase N — 
 - Phase 2 — `Factory::make()` still **persists** related models given as `User::factory()` attributes. Running it in tinker wrote a fake user into the dev SQLite DB (removed). — Never run factories against the dev DB. Use tests.
 - Phase 2 — MySQL 8 caches `information_schema` table sizes for 24 h. — `MySQLConnection` sets `information_schema_stats_expiry = 0` per session (ignored on servers without it).
 - Phase 2 — `.env.testing` replaces `.env` entirely (it would need its own `APP_KEY`). — Integration test credentials go in `.env` as `DBNOVA_TEST_DB_*`.
+- Phase 3 — `@tanstack/vue-table` is **v9**: `useTable({ features: tableFeatures({...}), columns, data })`, and sizing/resizing are opt-in features. — Read `node_modules/@tanstack/vue-table/skills/` and don't use v8 (`useVueTable`) patterns.
+- Phase 3 — In `<script setup>`, a prop named `table` and a `const table = useTable()` collide in the template. — Name the instance `dataTable`.
+- Phase 3 — `@inertiajs/core` (where `HttpResponseError` lives) isn't a direct dependency and `@inertiajs/vue3` doesn't re-export it. — `lib/httpError.ts` duck-types `error.response.data` instead.
+- Phase 3 — `env()` outside `config/` returns null once config is cached. — Test credentials live in `config('dbnova.testing.*')`.
+- Phase 3 — oxlint `no-floating-promises` fails CI on fire-and-forget calls. — Prefix with `void` when the promise already handles its own errors.
 - Phase 0 — `mysql` on PATH is a shell alias. — Always resolve binaries from config, never from `PATH` lookups that rely on the interactive shell.

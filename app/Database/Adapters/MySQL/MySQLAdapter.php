@@ -5,12 +5,14 @@ namespace App\Database\Adapters\MySQL;
 use App\Database\Contracts\DatabaseAdapterInterface;
 use App\Database\Contracts\SchemaManagerInterface;
 use App\Database\Contracts\ServerInspectorInterface;
+use App\Database\Contracts\TableBrowserInterface;
 
 class MySQLAdapter implements DatabaseAdapterInterface
 {
     public function __construct(
         private MySQLServerInspector $serverInspector,
         private MySQLSchemaManager $schemaManager,
+        private MySQLTableBrowser $tableBrowser,
     ) {}
 
     public function engine(): string
@@ -26,5 +28,10 @@ class MySQLAdapter implements DatabaseAdapterInterface
     public function schema(): SchemaManagerInterface
     {
         return $this->schemaManager;
+    }
+
+    public function browser(): TableBrowserInterface
+    {
+        return $this->tableBrowser;
     }
 }

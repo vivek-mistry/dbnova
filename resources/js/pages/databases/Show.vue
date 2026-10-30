@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, setLayoutProps, usePage } from '@inertiajs/vue3';
+import { Head, Link, setLayoutProps, usePage } from '@inertiajs/vue3';
 import { Eye, Table2 } from '@lucide/vue';
 import DropDatabaseDialog from '@/components/database/DropDatabaseDialog.vue';
 import RenameDatabaseDialog from '@/components/database/RenameDatabaseDialog.vue';
@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { formatBytes, formatNumber } from '@/lib/format';
 import { index, show } from '@/routes/databases';
+import { show as tableShow } from '@/routes/tables';
 import type { DatabaseInfo, TableInfo } from '@/types';
 
 const props = defineProps<{
@@ -85,9 +86,16 @@ const page = usePage();
                                         v-else
                                         class="size-4 text-muted-foreground"
                                     />
-                                    <span class="font-medium">{{
-                                        table.name
-                                    }}</span>
+                                    <Link
+                                        :href="
+                                            tableShow({
+                                                database: database.name,
+                                                table: table.name,
+                                            })
+                                        "
+                                        class="font-medium hover:underline"
+                                        >{{ table.name }}</Link
+                                    >
                                 </span>
                             </td>
                             <td class="px-4 py-2 text-muted-foreground">
