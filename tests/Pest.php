@@ -1,8 +1,11 @@
 <?php
 
+use App\Database\Contracts\DatabaseAdapterInterface;
+use App\Database\Contracts\SchemaManagerInterface;
 use App\Models\User;
 use App\Services\Auth\MySQLCredentialStore;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Mockery\MockInterface;
 use Tests\TestCase;
 
 /*
@@ -58,4 +61,33 @@ function actingAsMySqlUser(?User $user = null, string $password = 'secret'): Use
     app(MySQLCredentialStore::class)->store($user->username, $password);
 
     return $user;
+}
+
+/**
+ * Replace the managed-database adapter with one whose schema manager is a mock.
+ */
+function fakeSchemaManager(): MockInterface
+{
+    $schema = Mockery::mock(SchemaManagerInterface::class);
+
+    test()->mock(DatabaseAdapterInterface::class, fn (MockInterface $adapter) => $adapter
+        ->shouldReceive('schema')
+        ->andReturn($schema));
+
+    return $schema;
+}
+
+/**
+ * Credentials for integration tests against a real MySQL server, or null
+ * when DBNOVA_TEST_DB_USERNAME is not configured.
+ *
+ * @return array{username: string, password: string}|null
+ */
+function mySqlTestCredentials(): ?array
+{
+    $username = env('DBNOVA_TEST_DB_USERNAME');
+
+    return is_string($username) && $username !== ''
+        ? ['username' => $username, 'password' => (string) env('DBNOVA_TEST_DB_PASSWORD', '')]
+        : null;
 }

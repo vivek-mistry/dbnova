@@ -19,3 +19,7 @@ Newest entries go at the bottom. Use the format `YYYY-MM-DD — Decision — Why
 - 2026-10-30 — Phase 0 approved and committed. Work happens on phase branches (`phase/NN-name`) because main is the default branch. — Commit policy. — —
 - 2026-10-30 — **Login is a MySQL account** (phpMyAdmin style). It supersedes the single-admin model. Profile, Security, 2FA, passkeys, password reset, email verification and remember-me are removed, and their tests deleted (user approved). The host is fixed in `.env`, with no host field. — The user asked for it. — ADR 0008
 - 2026-10-30 — `dbnova:install` now only runs the system checks and exits 1 on failure. — No admin to create. — ADR 0008
+- 2026-10-30 — Database rename = create + one atomic `RENAME TABLE` for all tables + drop the old one. It's refused when the database has views, routines, events or triggers. If the move fails, the new database is dropped. — The user chose it. Honest and safe. — —
+- 2026-10-30 — Integration tests use a dedicated MySQL user limited to `dbnova\_test\_%`, with credentials in `.env` (`DBNOVA_TEST_DB_*`). CI uses a throwaway `mysql:8.0` container. — The user chose it. — —
+- 2026-10-30 — Dropping a database asks for the typed name + MySQL password in one dialog (not Fortify's redirecting `password.confirm`, which can't replay a DELETE). — UX + safety. — ADR 0008
+- 2026-10-30 — Adapter contracts grow per phase instead of declaring unimplemented methods up front. — There's no dead code, and each phase owns its contract. — ADR 0001

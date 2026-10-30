@@ -22,7 +22,7 @@ Read `.claude/docs/DATABASE_ADAPTERS.md` first.
 6. **Service/controller** depend on the interface (constructor injection), and record mutations through `AuditLogger`.
 7. **Tests:**
     - Unit tests for any SQL builder.
-    - Integration tests in `tests/Feature/Database/MySQL` using `withTestDatabase()` (guarded by `DBNOVA_TEST_MYSQL`).
+    - Integration tests in `tests/Feature/Database/MySQL` that skip without `mySqlTestCredentials()` and use `dbnova_test_<random>` databases dropped in `afterEach`.
     - Feature tests bind a fake adapter.
 
 ## Snippets

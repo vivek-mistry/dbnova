@@ -11,4 +11,7 @@ Append entries during and at the end of each phase. Use the format `Phase N — 
 - Phase 1 — Layout props in Inertia v3 pages come from `setLayoutProps({...})` (dynamic) or `defineOptions({ layout: {...} })` (static). — Use `setLayoutProps` when breadcrumbs depend on props.
 - Phase 1 — Tests that hit authenticated routes must use `actingAsMySqlUser()` (tests/Pest.php). A plain `actingAs()` gets logged out by `EnsureMySQLCredentials`. — Use the helper.
 - Phase 1 — Never store real MySQL passwords in repo files, memory or tests. — Tests use fake values like `Secret@123` with a mocked `MySQLConnector`.
+- Phase 2 — `Factory::make()` still **persists** related models given as `User::factory()` attributes. Running it in tinker wrote a fake user into the dev SQLite DB (removed). — Never run factories against the dev DB. Use tests.
+- Phase 2 — MySQL 8 caches `information_schema` table sizes for 24 h. — `MySQLConnection` sets `information_schema_stats_expiry = 0` per session (ignored on servers without it).
+- Phase 2 — `.env.testing` replaces `.env` entirely (it would need its own `APP_KEY`). — Integration test credentials go in `.env` as `DBNOVA_TEST_DB_*`.
 - Phase 0 — `mysql` on PATH is a shell alias. — Always resolve binaries from config, never from `PATH` lookups that rely on the interactive shell.

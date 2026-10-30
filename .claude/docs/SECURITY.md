@@ -8,7 +8,8 @@ DBNova is effectively a superuser console for a MySQL server. Its threat model a
 - There are no app accounts. Registration, password reset, email verification, 2FA and passkeys are removed. Fortify login throttling (5/min per username + IP) is kept.
 - "Remember me" is not offered, because a remembered session would have no MySQL credentials.
 - All app routes sit behind `auth` + `verified` middleware. A feature test asserts that every non-auth route requires auth.
-- Session lifetime is configurable. Re-confirming the password (`password.confirm`) is required for: dropping a database, the import "drop & recreate" action, and changing connection settings.
+- Session lifetime is configurable.
+- Dropping a database requires typing its exact name **and** re-entering the MySQL password in the same dialog (`DropDatabaseRequest` checks the password against MySQL). The import "drop & recreate" action follows the same pattern. Fortify's `password.confirm` page is also MySQL-backed, for flows that redirect.
 
 ## MySQL credentials
 

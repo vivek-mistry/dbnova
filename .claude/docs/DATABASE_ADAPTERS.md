@@ -6,16 +6,16 @@ All managed-database work goes through engine-neutral contracts. MySQL is the fi
 
 ## Contracts (`app/Database/Contracts`)
 
-| Interface                  | Responsibility          | Key methods (indicative)                                                                                                                     |
-| -------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DatabaseAdapterInterface` | Entry point and factory | `engine(): string`, `capabilities(): Capabilities`, `server()`, `schema()`, `tables()`, `browser()`, `queries()`, `importer()`, `exporter()` |
-| `ServerInspectorInterface` | Server metadata         | `info(): ServerInfo`, `status()`, `variables()`, `processes()`, `killQuery(int)`                                                             |
-| `SchemaManagerInterface`   | Databases and catalog   | `databases(): list<DatabaseInfo>`, `createDatabase()`, `dropDatabase()`, `tables(db)`, `columns(db, table)`, `indexes()`, `foreignKeys()`    |
-| `TableManagerInterface`    | DDL                     | `create()`, `alter(TableChange[])`, `drop()`, `truncate()`, `rename()`, `previewSql(...)`                                                    |
-| `TableBrowserInterface`    | Data access             | `page(TableRef, PageRequest): Page`, `insert()`, `update(RowKey, values)`, `delete(RowKey)`, `count(exact: bool)`                            |
-| `QueryExecutorInterface`   | SQL editor              | `execute(db, sql, QueryOptions): QueryResultSet`, `cancel(connectionId)`                                                                     |
-| `ImporterInterface`        | Bulk import             | `preflight(Source, target): PreflightReport`, `import(Source, target, ProgressReporter): ImportOutcome`                                      |
-| `ExporterInterface`        | Bulk export             | `exportDatabase(db, tables, ExportOptions, sink, ProgressReporter)`, `exportCsv(...)`                                                        |
+| Interface                  | Responsibility          | Key methods (indicative)                                                                                                                                                                                                            |
+| -------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DatabaseAdapterInterface` | Entry point and factory | `engine(): string`, `server()`, `schema()` (Phase 2). Each later phase adds its accessor: `browser()` (3), `tables()` (4), `queries()` (5), `importer()` (6), `exporter()` (7), plus `capabilities()` once a second engine needs it |
+| `ServerInspectorInterface` | Server metadata         | `info(): ServerInfo`, `status()`, `variables()`, `processes()`, `killQuery(int)`                                                                                                                                                    |
+| `SchemaManagerInterface`   | Databases and catalog   | `databases(): list<DatabaseInfo>`, `createDatabase()`, `dropDatabase()`, `tables(db)`, `columns(db, table)`, `indexes()`, `foreignKeys()`                                                                                           |
+| `TableManagerInterface`    | DDL                     | `create()`, `alter(TableChange[])`, `drop()`, `truncate()`, `rename()`, `previewSql(...)`                                                                                                                                           |
+| `TableBrowserInterface`    | Data access             | `page(TableRef, PageRequest): Page`, `insert()`, `update(RowKey, values)`, `delete(RowKey)`, `count(exact: bool)`                                                                                                                   |
+| `QueryExecutorInterface`   | SQL editor              | `execute(db, sql, QueryOptions): QueryResultSet`, `cancel(connectionId)`                                                                                                                                                            |
+| `ImporterInterface`        | Bulk import             | `preflight(Source, target): PreflightReport`, `import(Source, target, ProgressReporter): ImportOutcome`                                                                                                                             |
+| `ExporterInterface`        | Bulk export             | `exportDatabase(db, tables, ExportOptions, sink, ProgressReporter)`, `exportCsv(...)`                                                                                                                                               |
 
 `Capabilities` lists engine features (for example `supportsKeysetPagination`, `supportsTransactionalDdl=false` for MySQL), so the UI can hide unsupported actions.
 
@@ -32,7 +32,7 @@ All managed-database work goes through engine-neutral contracts. MySQL is the fi
 
 ## Process layer (`app/Database/Processes`)
 
-- `ProcessRunner::run(array $command, ?InputStream $input, ?callable $onOutput, ?float $timeout): ProcessResult`.
+- `ProcessRunner::run('mysql'|'mysqldump', array $credentials, list<string> $arguments, ?int $timeoutSeconds): ProcessResult` (Laravel's process result). Credentials are passed explicitly so queued jobs can supply the ones stored on their job row (ADR 0008). Phase 6 adds streaming stdin.
 - `DefaultsFile`: writes `[client] user/password/host/port/socket` to a temp file with mode 0600, and `--defaults-extra-file=` is passed **first** in argv. The file is deleted in `finally`.
 - Process arguments are always arrays.
 

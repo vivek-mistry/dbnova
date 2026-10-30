@@ -2,6 +2,9 @@
 
 namespace App\Providers;
 
+use App\Database\Adapters\MySQL\MySQLAdapter;
+use App\Database\Adapters\MySQL\MySQLConnection;
+use App\Database\Contracts\DatabaseAdapterInterface;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +18,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // One managed-server connection per request (or per queued job).
+        $this->app->scoped(MySQLConnection::class);
+        $this->app->bind(DatabaseAdapterInterface::class, MySQLAdapter::class);
     }
 
     /**

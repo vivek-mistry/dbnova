@@ -19,13 +19,16 @@ class MySQLConnector
     public const array ACCESS_DENIED_CODES = [1045, 1698];
 
     /**
+     * @param  array<int, mixed>  $options  Extra PDO attributes.
+     *
      * @throws PDOException
      */
-    public function connect(string $username, string $password): PDO
+    public function connect(string $username, string $password, array $options = []): PDO
     {
         return new PDO($this->dsn(), $username, $password, [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_TIMEOUT => config()->integer('dbnova.connection.connect_timeout'),
+            ...$options,
         ]);
     }
 
