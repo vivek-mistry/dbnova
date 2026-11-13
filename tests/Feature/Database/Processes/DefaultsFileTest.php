@@ -1,5 +1,6 @@
 <?php
 
+use App\Database\Exceptions\DatabaseOperationException;
 use App\Database\Processes\DefaultsFile;
 use Illuminate\Support\Facades\File;
 
@@ -52,4 +53,31 @@ test('deleting the file removes it from disk', function () {
     $defaultsFile->delete();
 
     expect($defaultsFile->path)->not->toBeFile();
+});
+
+test('a line break or NUL in a value is refused, because it would start a new option such as result-file', function (array $credentials, ?string $socket) {
+    config(['dbnova.connection.socket' => $socket]);
+
+    expect(fn () => DefaultsFile::create($credentials))
+        ->toThrow(DatabaseOperationException::class, 'line break');
+
+    expect(File::glob($this->temporaryDirectory.'/*.cnf'))->toBe([]);
+})->with([
+    'LF in password' => [['username' => 'u', 'password' => "x\nresult-file=/tmp/owned\n#"], null],
+    'CR in password' => [['username' => 'u', 'password' => "x\rplugin-dir=/tmp"], null],
+    'NUL in password' => [['username' => 'u', 'password' => "x\0y"], null],
+    'LF in username' => [['username' => "u\nhost=evil", 'password' => 'p'], null],
+    'LF in socket' => [['username' => 'u', 'password' => 'p'], "/tmp/s.sock\nprotocol=TCP"],
+]);
+
+test('the refusal never repeats the value', function () {
+    try {
+        DefaultsFile::create(['username' => 'u', 'password' => "Secret\nresult-file=/x"]);
+    } catch (DatabaseOperationException $exception) {
+        expect($exception->getMessage())->not->toContain('Secret')->not->toContain('result-file');
+
+        return;
+    }
+
+    $this->fail('No exception was thrown.');
 });

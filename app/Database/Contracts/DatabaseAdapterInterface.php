@@ -26,4 +26,6 @@ interface DatabaseAdapterInterface
     public function queries(): QueryExecutorInterface;
 
     public function importer(): ImporterInterface;
+
+    public function exporter(): ExporterInterface;
 }

@@ -80,6 +80,8 @@ return [
         'failed_import_hours' => (int) env('DBNOVA_FAILED_IMPORT_HOURS', 24),
         'incomplete_upload_hours' => (int) env('DBNOVA_INCOMPLETE_UPLOAD_HOURS', 24),
         'export_link_minutes' => (int) env('DBNOVA_EXPORT_LINK_MINUTES', 60),
+        // Finished export files are deleted after this many hours (dbnova:prune-temp).
+        'export_file_hours' => (int) env('DBNOVA_EXPORT_FILE_HOURS', 24),
     ],
 
     /*
@@ -96,6 +98,9 @@ return [
 
     // A running import writes a heartbeat every 2 s; after this long without one it is marked interrupted.
     'import_heartbeat_stale_seconds' => (int) env('DBNOVA_IMPORT_HEARTBEAT_STALE_SECONDS', 120),
+
+    // The same for a running export (it also writes a heartbeat every 2 s).
+    'export_heartbeat_stale_seconds' => (int) env('DBNOVA_EXPORT_HEARTBEAT_STALE_SECONDS', 120),
 
     /*
     |--------------------------------------------------------------------------

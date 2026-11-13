@@ -18,6 +18,7 @@ DBNova is effectively a superuser console for a MySQL server. Its threat model a
 - Queued jobs (Phases 6 and 7) store the dispatching user's credentials encrypted on the job row and wipe them when the job reaches a terminal state.
 - `users` rows never contain a password.
 - They're given to the CLI only through a temporary `--defaults-extra-file` (mode 0600, under `storage/app/dbnova/tmp`, deleted in `finally`). They're **never** put in argv (visible in `ps`) and never in `MYSQL_PWD` (deprecated).
+- Option files are read line by line, so a value containing CR, LF or NUL would start a new option. For example, the password `x⏎result-file=/path` makes mysqldump write over any file the worker can write. Quoting can't stop this. `DefaultsFile` therefore **refuses** such usernames, passwords, hosts and socket paths, without echoing the value, and login refuses them too. Any MySQL user can set such a password for themselves, so this is the real control. (Security review 7a, HIGH-1, verified against mysqldump 8.0.39.)
 - They're never logged, never serialized into job payloads (jobs hold only IDs), and never sent to the frontend.
 - Recommended setup: a dedicated MySQL user with the required grants (see INSTALL.md) rather than `root`.
 
@@ -44,7 +45,13 @@ DBNova is effectively a superuser console for a MySQL server. Its threat model a
 - Import credentials: stored encrypted on the import at Start, read by the worker and **wiped as soon as the `mysql` client has them**. A queued import that no worker starts within `session.lifetime` is failed and wiped by `dbnova:recover-jobs`. The temporary `.cnf` is deleted in `finally`; one left by a SIGKILLed worker is deleted by `dbnova:prune-temp` after 1 h.
 - "Drop & recreate target" requires the typed name and the MySQL password, is throttled (5/min; so is dropping a database), and is refused while another import into that database is queued or running, or while MySQL is still running statements there (`busySessionCount`, e.g. a `mysql` client orphaned by a killed worker).
 - Security review 2026-11-13 (Phase 6a) found the original leading-token check bypassable (`RENAME TABLE a TO other.a`, `DROP TABLE a, other.b`, `--\x01;USE other`); the policy above replaced it.
-- Export downloads use temporary signed URLs and expire.
+- Exports (7a):
+    - `mysqldump` gets database and table names only after `--`, and only after they have been checked against the catalog.
+    - Credentials go on the export row encrypted and are wiped as soon as the worker has read them.
+    - Files use UUID paths (mode 0600, opened with `x`), and a failed, cancelled or interrupted export deletes its partial file.
+    - Downloads need a temporary signed URL (≤ `export_link_minutes`, never past the file's expiry) **and** the signed-in owner. The response is `Cache-Control: no-store`, and the download filename keeps only `[A-Za-z0-9_.-]`.
+    - Read-only mode allows exports.
+    - The `mysql` system database can be exported, because what a user can dump is decided by their MySQL grants.
 
 ## Web
 

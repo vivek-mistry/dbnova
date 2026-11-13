@@ -92,6 +92,19 @@ test('users cannot log in when MySQL rejects their credentials', function () {
     expect(app(MySQLCredentialStore::class)->get())->toBeNull();
 });
 
+test('passwords with line breaks are refused before MySQL is asked', function (string $password) {
+    test()->mock(MySQLConnector::class, fn ($mock) => $mock->shouldNotReceive('connect'));
+
+    $this->post(route('login.store'), ['username' => 'root', 'password' => $password])
+        ->assertSessionHasErrors('username');
+
+    $this->assertGuest();
+    expect(app(MySQLCredentialStore::class)->get())->toBeNull();
+})->with([
+    'LF' => ["x\nresult-file=/tmp/owned\n#"],
+    'CR' => ["x\rpassword=y"],
+]);
+
 test('an unreachable MySQL server is reported on the login form', function () {
     mySqlRejectsLogin(new PDOException('SQLSTATE[HY000] [2002] Connection refused', 2002));
 

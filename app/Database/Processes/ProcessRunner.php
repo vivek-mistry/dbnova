@@ -5,6 +5,7 @@ namespace App\Database\Processes;
 use Illuminate\Contracts\Process\InvokedProcess;
 use Illuminate\Contracts\Process\ProcessResult;
 use Illuminate\Support\Facades\Process;
+use Symfony\Component\Process\Process as SymfonyProcess;
 use Throwable;
 use Traversable;
 
@@ -19,6 +20,9 @@ class ProcessRunner
 
     /** How long a stopped tool gets to exit after SIGTERM before SIGKILL. */
     private const int STOP_GRACE_SECONDS = 5;
+
+    /** How much of a tool's stderr streamOutput() keeps. */
+    private const int KEPT_ERROR_BYTES = 65536;
 
     /**
      * @param  'mysql'|'mysqldump'  $binary
@@ -87,6 +91,94 @@ class ProcessRunner
         } finally {
             $defaultsFile->delete();
         }
+    }
+
+    /**
+     * Run a CLI tool and hand its stdout to $onOutput piece by piece, so a
+     * multi-GB dump never sits in memory or in a second temporary file.
+     *
+     * Symfony Process is used directly because it can drop output that was
+     * already handed over (clearOutput); the Process facade keeps it all.
+     * When the tool produces output faster than $onOutput consumes it, the
+     * pipe fills and the tool waits (backpressure). $onTick runs at least
+     * every few milliseconds, also while the tool is quiet. If either
+     * callback throws, the tool is stopped (SIGTERM, then SIGKILL after
+     * 5 s) and the exception is rethrown.
+     *
+     * @param  'mysql'|'mysqldump'  $binary
+     * @param  array{username: string, password: string}  $credentials
+     * @param  list<string>  $arguments
+     * @param  callable(string): void  $onOutput
+     * @param  callable(): void  $onTick
+     * @return array{exitCode: int, errorOutput: string} The last 64 KB of stderr.
+     */
+    public function streamOutput(string $binary, array $credentials, array $arguments, callable $onOutput, callable $onTick): array
+    {
+        $defaultsFile = DefaultsFile::create($credentials);
+        $process = new SymfonyProcess([
+            config()->string("dbnova.binaries.{$binary}"),
+            '--defaults-extra-file='.$defaultsFile->path,
+            ...$arguments,
+        ], timeout: null);
+        $errorOutput = '';
+
+        try {
+            $process->start();
+
+            do {
+                $running = $process->isRunning();
+                $received = $this->drainOutput($process, $onOutput, $errorOutput);
+                $onTick();
+
+                if ($running && $received === 0) {
+                    usleep(self::POLL_MICROSECONDS);
+                }
+            } while ($running);
+
+            return ['exitCode' => $process->getExitCode() ?? -1, 'errorOutput' => $errorOutput];
+        } catch (Throwable $exception) {
+            $this->stop($process);
+
+            throw $exception;
+        } finally {
+            $defaultsFile->delete();
+        }
+    }
+
+    /**
+     * SIGTERM, then SIGKILL if the tool has not exited after a grace period.
+     */
+    private function stop(SymfonyProcess $process): void
+    {
+        if (! $process->isRunning()) {
+            return;
+        }
+
+        $process->stop(self::STOP_GRACE_SECONDS, SIGKILL);
+    }
+
+    /**
+     * Hand new stdout to $onOutput and forget it; keep the tail of stderr.
+     *
+     * @param  callable(string): void  $onOutput
+     */
+    private function drainOutput(SymfonyProcess $process, callable $onOutput, string &$errorOutput): int
+    {
+        $output = $process->getIncrementalOutput();
+        $process->clearOutput();
+
+        $error = $process->getIncrementalErrorOutput();
+
+        if ($error !== '') {
+            $process->clearErrorOutput();
+            $errorOutput = substr($errorOutput.$error, -self::KEPT_ERROR_BYTES);
+        }
+
+        if ($output !== '') {
+            $onOutput($output);
+        }
+
+        return strlen($output);
     }
 
     /**

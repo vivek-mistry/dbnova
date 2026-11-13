@@ -2,6 +2,7 @@
 
 use App\Database\Adapters\MySQL\MySQLImporter;
 use App\Database\Contracts\DatabaseAdapterInterface;
+use App\Database\Contracts\ExporterInterface;
 use App\Database\Contracts\QueryExecutorInterface;
 use App\Database\Contracts\RecordManagerInterface;
 use App\Database\Contracts\SchemaManagerInterface;
@@ -80,7 +81,7 @@ function fakeSchemaManager(): MockInterface
  * Replace the managed-database adapter with one whose schema manager, table
  * browser, record manager, table manager and query executor are mocks.
  *
- * @return array{schema: MockInterface, browser: MockInterface, records: MockInterface, tables: MockInterface, queries: MockInterface}
+ * @return array{schema: MockInterface, browser: MockInterface, records: MockInterface, tables: MockInterface, queries: MockInterface, exporter: MockInterface}
  */
 function fakeDatabaseAdapter(): array
 {
@@ -89,6 +90,8 @@ function fakeDatabaseAdapter(): array
     $records = Mockery::mock(RecordManagerInterface::class);
     $tables = Mockery::mock(TableManagerInterface::class);
     $queries = Mockery::mock(QueryExecutorInterface::class);
+    $exporter = Mockery::mock(ExporterInterface::class);
+    $exporter->shouldReceive('estimateBytes')->andReturn(1024)->byDefault();
     $tables->shouldReceive('columnTypes')->andReturn(['int', 'varchar', 'text'])->byDefault();
     $tables->shouldReceive('engines')->andReturn(['InnoDB'])->byDefault();
     $tables->shouldReceive('foreignKeys')->andReturn([])->byDefault();
@@ -100,9 +103,10 @@ function fakeDatabaseAdapter(): array
         ->shouldReceive('tables')->andReturn($tables)
         ->shouldReceive('queries')->andReturn($queries)
         // Preflight only reads files, so the real importer is safe to use.
-        ->shouldReceive('importer')->andReturn(app(MySQLImporter::class)));
+        ->shouldReceive('importer')->andReturn(app(MySQLImporter::class))
+        ->shouldReceive('exporter')->andReturn($exporter));
 
-    return ['schema' => $schema, 'browser' => $browser, 'records' => $records, 'tables' => $tables, 'queries' => $queries];
+    return ['schema' => $schema, 'browser' => $browser, 'records' => $records, 'tables' => $tables, 'queries' => $queries, 'exporter' => $exporter];
 }
 
 /**

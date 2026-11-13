@@ -67,3 +67,50 @@ export type ImportJobStatus = {
     createdAt: string;
     conflicts?: string[];
 };
+
+export type ExportStatus =
+    | 'queued'
+    | 'exporting'
+    | 'completed'
+    | 'failed'
+    | 'cancelled'
+    | 'interrupted'
+    | 'expired';
+
+export type ExportFormat = 'sql' | 'sql.gz';
+
+export type ExportContent = 'both' | 'structure' | 'data';
+
+export type ExportJobStatus = {
+    id: string;
+    database: string;
+    tables: string[] | null;
+    format: ExportFormat;
+    options: { content?: ExportContent; includePrograms?: boolean };
+    status: ExportStatus;
+    fileName: string;
+    estimatedBytes: number;
+    bytesWritten: number;
+    fileBytes: number;
+    lastError: string | null;
+    cancelRequested: boolean;
+    downloadUrl: string | null;
+    startedAt: string | null;
+    finishedAt: string | null;
+    expiresAt: string | null;
+    createdAt: string;
+};
+
+export type ExportDatabase = {
+    name: string;
+    sizeBytes: number;
+    tableCount: number;
+    isSystem: boolean;
+};
+
+export type ExportTable = {
+    name: string;
+    type: string;
+    sizeBytes: number | null;
+    approximateRows: number | null;
+};

@@ -3,6 +3,7 @@ import { Head, useHttp } from '@inertiajs/vue3';
 import { FileUp, Pause, Play, X } from '@lucide/vue';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
+import ImportExportTabs from '@/components/import/ImportExportTabs.vue';
 import ImportStatusCard from '@/components/import/ImportStatusCard.vue';
 import ResetImportTargetDialog from '@/components/import/ResetImportTargetDialog.vue';
 import { Badge } from '@/components/ui/badge';
@@ -251,6 +252,8 @@ const selectClass =
     <Head title="Import" />
 
     <div class="flex flex-1 flex-col gap-6 p-4 lg:p-6">
+        <ImportExportTabs active="import" />
+
         <div>
             <h1 class="text-xl font-semibold tracking-tight">Import SQL</h1>
             <p class="text-sm text-muted-foreground">

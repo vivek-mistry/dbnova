@@ -2,6 +2,7 @@
 
 namespace App\Database\Processes;
 
+use App\Database\Exceptions\DatabaseOperationException;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 
@@ -49,6 +50,11 @@ final class DefaultsFile
      */
     private static function options(array $credentials): array
     {
+        self::assertSingleLine($credentials['username'], 'username');
+        self::assertSingleLine($credentials['password'], 'password');
+        self::assertSingleLine((string) config('dbnova.connection.socket'), 'socket path');
+        self::assertSingleLine(config()->string('dbnova.connection.host'), 'host');
+
         $options = [
             '[client]',
             'user='.self::quote($credentials['username']),
@@ -65,6 +71,24 @@ final class DefaultsFile
         }
 
         return $options;
+    }
+
+    /**
+     * Option files are read line by line, so a line break in a value would
+     * start a new option (e.g. result-file=… to make mysqldump write over
+     * any file the worker can write). Quoting cannot prevent that; such
+     * values are refused. The message never contains the value.
+     *
+     * @throws DatabaseOperationException
+     */
+    private static function assertSingleLine(string $value, string $what): void
+    {
+        if (strpbrk($value, "\r\n\0") !== false) {
+            throw new DatabaseOperationException(sprintf(
+                'The MySQL %s contains a line break or NUL character, which the MySQL command-line tools cannot be given safely. Change it to use imports and exports.',
+                $what,
+            ));
+        }
     }
 
     /**

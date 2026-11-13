@@ -3,6 +3,7 @@
 namespace App\Database\Adapters\MySQL;
 
 use App\Database\Contracts\DatabaseAdapterInterface;
+use App\Database\Contracts\ExporterInterface;
 use App\Database\Contracts\ImporterInterface;
 use App\Database\Contracts\QueryExecutorInterface;
 use App\Database\Contracts\RecordManagerInterface;
@@ -21,11 +22,17 @@ class MySQLAdapter implements DatabaseAdapterInterface
         private MySQLTableManager $tableManager,
         private MySQLQueryExecutor $queryExecutor,
         private MySQLImporter $importer,
+        private MySQLExporter $exporter,
     ) {}
 
     public function importer(): ImporterInterface
     {
         return $this->importer;
+    }
+
+    public function exporter(): ExporterInterface
+    {
+        return $this->exporter;
     }
 
     public function engine(): string

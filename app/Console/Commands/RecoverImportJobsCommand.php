@@ -2,12 +2,15 @@
 
 namespace App\Console\Commands;
 
+use App\Enums\ExportStatus;
 use App\Enums\ImportStatus;
 use App\Models\AuditLog;
+use App\Models\ExportJob;
 use App\Models\ImportJob;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\File;
 
 /**
  * A running import or file check writes a heartbeat every 2 seconds, even
@@ -16,7 +19,7 @@ use Illuminate\Console\Command;
  * interrupted. It is never resumed: what MySQL applied is unknown.
  */
 #[Signature('dbnova:recover-jobs')]
-#[Description('Mark imports whose worker stopped reporting as interrupted')]
+#[Description('Mark imports and exports whose worker stopped reporting as interrupted')]
 class RecoverImportJobsCommand extends Command
 {
     /**
@@ -75,8 +78,54 @@ class RecoverImportJobsCommand extends Command
                 'finished_at' => now(),
             ]);
 
+        [$recoveredExports, $abandonedExports] = $this->recoverExports();
+
         $this->info("Recovered {$recovered} stalled import(s); gave up on {$abandoned} import(s) no worker started.");
+        $this->info("Recovered {$recoveredExports} stalled export(s); gave up on {$abandonedExports} export(s) no worker started.");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * The same for exports: a stalled export is interrupted and its partial
+     * file deleted; a queued one no worker started loses its saved sign-in.
+     *
+     * @return array{0: int, 1: int}
+     */
+    private function recoverExports(): array
+    {
+        $staleBefore = now()->subSeconds(config()->integer('dbnova.export_heartbeat_stale_seconds'));
+        $recovered = 0;
+
+        $stale = ExportJob::query()
+            ->where('status', ExportStatus::Exporting)
+            ->where(fn ($query) => $query->whereNull('heartbeat_at')->orWhere('heartbeat_at', '<', $staleBefore))
+            ->get();
+
+        foreach ($stale as $export) {
+            $updated = ExportJob::query()->whereKey($export->id)->where('status', ExportStatus::Exporting)->update([
+                'status' => ExportStatus::Interrupted,
+                'last_error' => 'The export stopped reporting progress (the worker was stopped or the server restarted). Export again.',
+                'credentials' => null,
+                'finished_at' => now(),
+            ]);
+
+            if ($updated > 0) {
+                File::delete($export->path());
+                $recovered++;
+            }
+        }
+
+        $abandoned = ExportJob::query()
+            ->where('status', ExportStatus::Queued)
+            ->where('updated_at', '<', now()->subMinutes(config()->integer('session.lifetime')))
+            ->update([
+                'status' => ExportStatus::Failed,
+                'last_error' => 'No queue worker started the export in time, so the saved sign-in was discarded. Export again once a worker is running.',
+                'credentials' => null,
+                'finished_at' => now(),
+            ]);
+
+        return [$recovered, $abandoned];
     }
 }

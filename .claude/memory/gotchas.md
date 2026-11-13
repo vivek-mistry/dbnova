@@ -41,4 +41,6 @@ Append entries during and at the end of each phase. Use the format `Phase N — 
 - Phase 6 — `trim()` on a statement ending in `-- comment` means a re-emitted `;` would land inside the comment. — The import pump must put the delimiter on a new line when the statement's last line has a comment.
 - Phase 6 — With binary logging on, creating triggers or functions without SUPER fails with error 1419 (`log_bin_trust_function_creators`), even without a DEFINER clause. The `dbnova_test` account hits this. — Import integration tests use procedures (allowed) instead of triggers; preflight warns about DEFINER and routines.
 - Phase 6 — Laravel's `InvokedProcess` contract has no `stop()`. — `ProcessRunner::terminate()` sends SIGTERM, waits up to 5 s, then sends SIGKILL.
+- Phase 7 — `npx prettier` is not this repo's formatter. It reformats Vue files with double quotes. — Use `npx vp fmt <paths>` / `npm run check` (Vite+).
+- Phase 7 — PHPStan narrows `$process->isRunning()` to a constant after the first call in the same scope. — Put SIGTERM/SIGKILL loops in their own method, or use Symfony's `$process->stop($timeout, SIGKILL)`.
 - Phase 0 — `mysql` on PATH is a shell alias. — Always resolve binaries from config, never from `PATH` lookups that rely on the interactive shell.

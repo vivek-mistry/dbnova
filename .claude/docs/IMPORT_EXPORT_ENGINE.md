@@ -102,8 +102,25 @@ The UI polls `GET /imports/{id}` every 2 s while the job is active.
 
 ## Export
 
-- `ExportDatabaseJob` runs `mysqldump --defaults-extra-file=… --single-transaction --quick --routines --triggers --events --hex-blob --default-character-set=utf8mb4 <db> [tables…]`.
-- stdout streams to `storage/app/dbnova/exports/{uuid}.sql`, or through `deflate_init(ZLIB_ENCODING_GZIP)` incrementally to `.sql.gz`.
-- Progress = bytes written (the total is unknown, so an estimate based on `information_schema` data_length is clearly labelled as one).
-- Downloads use a temporary signed route with a streamed response. Files expire after `retention.export_link_minutes`.
-- **CSV:** an unbuffered PDO cursor → `fputcsv` to the response stream (small) or to a file via the job (large).
+State machine (`ExportStatus`): `queued → exporting → completed | failed | cancelled | interrupted`, and `completed → expired` once the file is deleted.
+
+### SQL / SQL.GZ (built in 7a)
+
+- `POST /exports {database, tables[], format: sql|sql.gz, content: both|structure|data, includePrograms}` checks that the database and every table exist (`information_schema` and `performance_schema` are refused). It also checks free disk (catalog estimate + `min_free_disk_bytes`) and caps each user at 3 unfinished exports. It then stores the signed-in credentials encrypted on the `ExportJob` and queues `ExportDatabaseJob` on `exports`.
+- `ExportDatabaseJob` (`tries = 1`, 24 h timeout) claims Queued→Exporting and **wipes the credentials** once it has read them. It then runs `MySQLExporter`:
+  `mysqldump --defaults-extra-file=… --single-transaction --quick --hex-blob --default-character-set=utf8mb4 --set-gtid-purged=OFF --no-tablespaces [--routines --events --triggers | --skip-triggers] [--no-data | --no-create-info] -- <db> [tables…]`
+    - There's no `--databases`, so the dump has **no CREATE DATABASE / USE** and imports into any database. This was the user's decision.
+    - Names come after `--`, so they can never be read as options.
+    - `--column-statistics=0` is added for a pre-8.0 server.
+- `ProcessRunner::streamOutput()` uses Symfony Process directly, because `clearOutput()` drops stdout once it has been handed over (the facade would keep it all). Each piece goes straight to `fwrite`, or through `deflate_add(ZLIB_NO_FLUSH)` for `.sql.gz`. The loop only sleeps when there's no output, and a full pipe makes mysqldump wait (backpressure).
+- The file is `storage/app/dbnova/exports/{uuid}.{sql|sql.gz}`, created with `fopen('xb')` (mode 0600, never overwrites). A non-zero exit, a missing `-- Dump completed` trailer, a short `fwrite` (disk full), a cancel, or free disk falling below `min_free_disk_bytes` each **delete the partial file**.
+- Progress is written every 2 s: `bytes_written` (SQL bytes), `file_bytes` (on disk) and the heartbeat. The UI labels the catalog `DATA_LENGTH` as an estimate.
+- **Downloads:** `toStatus()` mints a `URL::temporarySignedRoute('exports.download')` valid for `retention.export_link_minutes` (60) but never past the file's `expires_at`. The route also requires the signed-in owner. `BinaryFileResponse` streams from disk.
+- Files expire after `retention.export_file_hours` (24). `dbnova:prune-temp` deletes them and marks them `expired`; "Delete file" does it at once.
+- `dbnova:recover-jobs` marks an `exporting` job with a heartbeat older than 120 s as `interrupted` and deletes its partial file. A queued export that no worker starts within `session.lifetime` is failed and its credentials wiped.
+- Read-only mode allows exports, because they only read.
+- Audit: `export.start / completed / failed / cancelled / download`, with names and sizes only.
+
+### CSV (7b)
+
+- An unbuffered PDO cursor → `fputcsv` to a file, **always through the job** (user decision: no direct streamed responses), for a table or a full SQL editor result.

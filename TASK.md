@@ -1,14 +1,15 @@
 # DBNova — Current Task
 
-**Current phase:** Phase 7 — Export engine (not started; awaiting `/phase-start 7` approvals)
+**Current phase:** Phase 7 — Export engine (7a committed; 7b next)
 **Phase file:** [.claude/phases/phase-07-export.md](.claude/phases/phase-07-export.md)
-**Status:** Not started
+**Status:** In progress (7b next)
 **Branch:** `phase/00-architecture` (all phases so far)
 
 ## Now
 
-- Phase 7 kickoff: confirm open questions, then build the export engine
-- Still pending from Phase 6: browser check of imports (needs `php artisan queue:work --queue=imports,exports,default`, `php artisan schedule:work`, and `DBNOVA_MYSQL_BIN=/usr/local/mysql/bin/mysql` in `.env`)
+- User review of 7a in the browser (needs `php artisan queue:work --queue=imports,exports,default` and `php artisan schedule:work`, plus `DBNOVA_MYSQL_BIN` / `DBNOVA_MYSQLDUMP_BIN` in `.env`):
+  Import / Export → Export tab → database → all or chosen tables → format → Export → Download. Try: Cancel mid-way, Delete file, re-import the download on the Import tab
+- Then 7b — CSV of tables and SQL editor results (always through the job)
 
 ## Done
 
@@ -23,10 +24,10 @@
 ## Test environment (local MySQL)
 
 - MySQL user `dbnova_test` / `test`, limited to `dbnova_test` and `dbnova_test_*` databases
-- `dbnova_test_stress` was dropped after the Phase 6 stress run
-- Run real-MySQL tests: `DBNOVA_TEST_DB_USERNAME=dbnova_test DBNOVA_TEST_DB_PASSWORD=test php artisan test --compact` (or put both in `.env`)
+- Stress databases are dropped after each run (`dbnova:stress:seed-table` recreates the 10M-row table)
+- Run real-MySQL tests: `DBNOVA_TEST_DB_USERNAME=dbnova_test DBNOVA_TEST_DB_PASSWORD=test DBNOVA_MYSQL_BIN=/usr/local/mysql/bin/mysql DBNOVA_MYSQLDUMP_BIN=/usr/local/mysql/bin/mysqldump php artisan test --compact`
 
 ## Blocked / waiting on user
 
-- Add `DBNOVA_MYSQL_BIN=/usr/local/mysql/bin/mysql` (and `DBNOVA_MYSQLDUMP_BIN=/usr/local/mysql/bin/mysqldump` for Phase 7) to `.env`
-- Optional: add `DBNOVA_TEST_DB_USERNAME` / `DBNOVA_TEST_DB_PASSWORD` to `.env`
+- Decide on LOW-2: a cap on completed exports kept per user (e.g. 10 files or N GB), or leave as is
+- Add `DBNOVA_MYSQL_BIN=/usr/local/mysql/bin/mysql` and `DBNOVA_MYSQLDUMP_BIN=/usr/local/mysql/bin/mysqldump` to `.env`

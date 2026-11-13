@@ -26,6 +26,13 @@ class AuthenticateMySQLUser
         $username = $request->string(Fortify::username())->toString();
         $password = $request->string('password')->toString();
 
+        // The MySQL CLI tools get credentials through an option file, which a line break would break out of (SECURITY.md).
+        if (strpbrk($username.$password, "\r\n\0") !== false) {
+            throw ValidationException::withMessages([
+                Fortify::username() => __('MySQL usernames and passwords containing line breaks are not supported. Change the password to sign in to DBNova.'),
+            ]);
+        }
+
         if (! $this->verify($username, $password)) {
             return null;
         }

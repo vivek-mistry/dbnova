@@ -3,6 +3,7 @@
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\DatabaseTreeController;
+use App\Http\Controllers\ExportController;
 use App\Http\Controllers\ImportController;
 use App\Http\Controllers\QueryController;
 use App\Http\Controllers\RecordController;
@@ -53,6 +54,15 @@ Route::middleware(['auth', EnsureMySQLCredentials::class])->group(function () {
     Route::post('imports/{import}/cancel', [ImportController::class, 'cancel'])->name('imports.cancel');
     Route::post('imports/{import}/start', [ImportController::class, 'start'])->name('imports.start');
     Route::post('imports/{import}/reset-target', [ImportController::class, 'resetTarget'])->middleware('throttle:5,1')->name('imports.reset-target');
+
+    Route::get('exports', [ExportController::class, 'index'])->name('exports.index');
+    Route::get('exports/databases/{database}/tables', [ExportController::class, 'tables'])->name('exports.tables');
+    Route::post('exports', [ExportController::class, 'store'])->middleware('throttle:30,1')->name('exports.store');
+    Route::get('exports/{export}', [ExportController::class, 'show'])->whereUuid('export')->name('exports.show');
+    Route::post('exports/{export}/cancel', [ExportController::class, 'cancel'])->whereUuid('export')->name('exports.cancel');
+    Route::delete('exports/{export}', [ExportController::class, 'destroy'])->whereUuid('export')->name('exports.destroy');
+    Route::get('exports/{export}/download', [ExportController::class, 'download'])
+        ->whereUuid('export')->middleware('signed')->name('exports.download');
 
     Route::post('uploads', [UploadController::class, 'store'])->middleware('throttle:30,1')->name('uploads.store');
     Route::get('uploads/{upload}', [UploadController::class, 'show'])->name('uploads.show');
