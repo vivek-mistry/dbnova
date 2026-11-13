@@ -1,13 +1,15 @@
 # DBNova — Current Task
 
-**Current phase:** Phase 6 — Large import engine (not started)
+**Current phase:** Phase 6 — Large import engine (6a done, awaiting review; 6b next)
 **Phase file:** [.claude/phases/phase-06-import.md](.claude/phases/phase-06-import.md)
-**Status:** Not started
+**Status:** In progress
 **Branch:** `phase/00-architecture` (all phases so far)
 
 ## Now
 
-- Start Phase 6: confirm the import plan and decisions
+- User review of Phase 6a: Import / Export → choose a `.sql`/`.sql.gz`/`.zip` file and a database → "Upload and check". Try Pause/Resume, reload mid-upload and choose the same file again (it resumes), and a multi-database dump (it is rejected)
+- A queue worker must be running for the check: `php artisan queue:work --queue=imports,exports,default`
+- Then 6b: the import job itself, cancel/recovery, failure screen, 2 GB stress run
 
 ## Done
 
@@ -25,5 +27,7 @@
 - Run real-MySQL tests: `DBNOVA_TEST_DB_USERNAME=dbnova_test DBNOVA_TEST_DB_PASSWORD=test php artisan test --compact` (or put both in `.env`)
 
 ## Blocked / waiting on user
+
+- Approve the Phase 6a commit
 
 - Optional: add `DBNOVA_TEST_DB_USERNAME` / `DBNOVA_TEST_DB_PASSWORD` and `DBNOVA_MYSQL_BIN` / `DBNOVA_MYSQLDUMP_BIN` to `.env`

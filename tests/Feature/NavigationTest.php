@@ -3,7 +3,6 @@
 use Inertia\Testing\AssertableInertia as Assert;
 
 dataset('placeholder sections', [
-    'import / export' => ['import-export.index', 'Import / Export', 6],
     'processes' => ['processes.index', 'Processes', 8],
 ]);
 

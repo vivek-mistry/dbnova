@@ -9,5 +9,5 @@ First checked on 2026-10-30, then confirmed with `SystemCheckService` in Phase 1
 - **Test account:** MySQL user `dbnova_test` / password `test` (created 2026-10-30, at the user's request), limited to `dbnova_test` + `dbnova_test_*`. `dbnova_test_stress.orders` holds 10M benchmark rows. Run real-MySQL tests with `DBNOVA_TEST_DB_USERNAME=dbnova_test DBNOVA_TEST_DB_PASSWORD=test php artisan test --compact`.
 - **Redis:** `/opt/homebrew/bin/redis-server` is installed but not required (the queue uses the database driver).
 - **App DB:** SQLite at `database/database.sqlite`, with WAL mode on since Phase 1. `QUEUE_CONNECTION=database`, `CACHE_STORE=database`, `SESSION_DRIVER=database`.
-- **Free disk:** about 43 GB, which is enough for a 10 GB import (needs ≥ 2× the dump size).
+- **Free disk:** about 32 GB on 2026-11-13 (was 43 GB). Uploads need 1× the file + `min_free_disk_bytes` (5 GB); the MySQL data for an import needs room too, so local stress tests use a 2 GB dump and extrapolate (user decision).
 - **Boost:** configured for the Cursor agent only, with skills in `.cursor/skills/` (gitignored). `AGENTS.md` is generated and gitignored. The `search-docs` MCP tool isn't available to Claude here, so read the `.cursor/skills/*` files instead.

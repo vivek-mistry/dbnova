@@ -31,7 +31,15 @@ DBNova is effectively a superuser console for a MySQL server. Its threat model a
 ## Uploads & files
 
 - Uploads are stored under UUID paths, and the original filename is metadata only.
-- ZIP: entries with `..`, absolute paths or symlinks are rejected. Exactly one `.sql` entry is allowed. A zip-bomb guard aborts if the uncompressed bytes exceed a configured ratio or the free disk space.
+- Uploads (Phase 6a) are owned by the MySQL account that started them. Another user's upload or import returns 404. Files are mode 0600 in 0700 directories. Chunk PUTs are rate-limited per user, and a chunk of the wrong length is refused and not recorded.
+- ZIP: entries with `..` segments, absolute or drive paths, NUL bytes, symlinks or encryption are rejected. Exactly one file (a `.sql`) is allowed; `__MACOSX/` and `._*` metadata are ignored. Nothing is ever extracted to disk: the entry is streamed, so a zip bomb can't fill the disk, and reads are bounded per call. Gzip is inflated in 8 KB compressed steps, so one step can't explode memory.
+- The `mysql` client that runs imports (6b) always gets `--binary-mode` (client commands such as `\!` shell and `source` are disabled in piped input) and `--local-infile=0` (a dump can't read files on the DBNova host). Dump files are untrusted input.
+- **The "one database" rule is a best-effort guard, not a security boundary.** The real boundary is the MySQL account's grants: import with an account limited to the target database when the dump is untrusted. The guard (`MySQLDumpPolicy`, run on every statement in preflight) does three things:
+    - Accepts only the statement kinds that dump tools write: SET, INSERT/REPLACE, CREATE/ALTER/DROP of tables, views, routines, triggers, events and indexes, LOCK/UNLOCK, TRUNCATE, START TRANSACTION/COMMIT, and the database statements it skips. UPDATE, DELETE, SELECT, CALL, RENAME, LOAD DATA, GRANT and the rest are refused; they belong in the SQL editor.
+    - Refuses database-qualified names in every table-name position (including DROP/LOCK lists, `CREATE INDEX … ON`, `CREATE TRIGGER … ON`), plus `ALTER TABLE … RENAME/EXCHANGE`.
+    - Refuses text the `mysql` client would split differently from DBNova's scanner: a backslash outside strings (client commands such as `\C`), the delimiter inside `/*! … */`, `delimiter` at the start of a line in the middle of a statement, `NO_BACKSLASH_ESCAPES`, and big5/cp932/gb18030/gbk/sjis charsets. The scanner follows the client's comment rule (`--` + whitespace only); this was checked against the real 8.0.39 client.
+    - Routine, trigger and view **bodies** are not inspected (they run later, with the definer's or caller's rights).
+- Security review 2026-11-13 (Phase 6a) found the original leading-token check bypassable (`RENAME TABLE a TO other.a`, `DROP TABLE a, other.b`, `--\x01;USE other`); the policy above replaced it.
 - Export downloads use temporary signed URLs and expire.
 
 ## Web

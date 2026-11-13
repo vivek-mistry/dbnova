@@ -1,7 +1,9 @@
 <?php
 
 use App\Database\Adapters\MySQL\MySQLConnector;
+use App\Enums\ImportStatus;
 use App\Jobs\RecordQueueHeartbeat;
+use App\Models\ImportJob;
 use App\Models\User;
 use App\Services\System\SystemCheckService;
 use App\Services\System\SystemCheckStatus;
@@ -153,4 +155,20 @@ describe('queue worker', function () {
         expect($check->status)->toBe(SystemCheckStatus::Warning);
         expect($check->detail)->toBe('Last heartbeat 181 seconds ago');
     });
+
+    test('a worker busy with an import that reports progress is ok', function (?int $importHeartbeatSecondsAgo, SystemCheckStatus $status) {
+        $this->freezeTime();
+        config(['dbnova.queue_heartbeat_stale_seconds' => 180]);
+        Cache::forever(RecordQueueHeartbeat::CACHE_KEY, now()->subMinutes(30)->getTimestamp());
+        ImportJob::factory()->create([
+            'status' => ImportStatus::Preflight,
+            'heartbeat_at' => $importHeartbeatSecondsAgo === null ? null : now()->subSeconds($importHeartbeatSecondsAgo),
+        ]);
+
+        expect(app(SystemCheckService::class)->checkQueueWorker()->status)->toBe($status);
+    })->with([
+        'import heartbeat is recent' => [10, SystemCheckStatus::Ok],
+        'import heartbeat is stale too' => [600, SystemCheckStatus::Warning],
+        'import never reported' => [null, SystemCheckStatus::Warning],
+    ]);
 });

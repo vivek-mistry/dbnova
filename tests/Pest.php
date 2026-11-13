@@ -1,5 +1,6 @@
 <?php
 
+use App\Database\Adapters\MySQL\MySQLImporter;
 use App\Database\Contracts\DatabaseAdapterInterface;
 use App\Database\Contracts\QueryExecutorInterface;
 use App\Database\Contracts\RecordManagerInterface;
@@ -97,7 +98,9 @@ function fakeDatabaseAdapter(): array
         ->shouldReceive('browser')->andReturn($browser)
         ->shouldReceive('records')->andReturn($records)
         ->shouldReceive('tables')->andReturn($tables)
-        ->shouldReceive('queries')->andReturn($queries));
+        ->shouldReceive('queries')->andReturn($queries)
+        // Preflight only reads files, so the real importer is safe to use.
+        ->shouldReceive('importer')->andReturn(new MySQLImporter));
 
     return ['schema' => $schema, 'browser' => $browser, 'records' => $records, 'tables' => $tables, 'queries' => $queries];
 }

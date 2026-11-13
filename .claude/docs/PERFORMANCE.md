@@ -42,6 +42,8 @@
 | Same table, 1,000-row page as JSON                              | —              | 1.8 ms query, 192 KB JSON, 46.5 MB peak PHP memory              | dev Mac               | 2026-10-30 |
 | Same table sorted by a non-key column, OFFSET 100,000           | known slow     | 1,403 ms (offset fallback)                                      | dev Mac               | 2026-10-30 |
 | Browse 10M rows, page 50,000 (keyset)                           | ≤ 200 ms       | —                                                               | —                     | —          |
+| Scanner split, real `mysqldump` (353 MB, 1M rows)               | —              | 103 MB/s, 9.5 MB peak (Phase 5 version: 16 MB/s)                | dev Mac               | 2026-11-13 |
+| Preflight 353 MB `.sql` / same as 25 MB `.sql.gz`               | memory ≤ 64 MB | 4.6 s (77 MB/s) / 3.7 s (95 MB/s), +5 MB peak                   | dev Mac               | 2026-11-13 |
 | Import 10 GB `.sql`                                             | memory ≤ 64 MB | —                                                               | —                     | —          |
 | Import 10 GB `.sql.gz`                                          | memory ≤ 64 MB | —                                                               | —                     | —          |
 | Export 5 GB DB `.sql.gz`                                        | memory ≤ 64 MB | —                                                               | —                     | —          |

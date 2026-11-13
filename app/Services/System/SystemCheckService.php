@@ -3,7 +3,9 @@
 namespace App\Services\System;
 
 use App\Database\Adapters\MySQL\MySQLConnector;
+use App\Enums\ImportStatus;
 use App\Jobs\RecordQueueHeartbeat;
+use App\Models\ImportJob;
 use App\Services\Auth\MySQLCredentialStore;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
@@ -205,8 +207,19 @@ class SystemCheckService
         }
 
         $secondsAgo = now()->getTimestamp() - (int) $lastHeartbeat;
+        $staleSeconds = (int) config('dbnova.queue_heartbeat_stale_seconds');
 
-        if ($secondsAgo > (int) config('dbnova.queue_heartbeat_stale_seconds')) {
+        if ($secondsAgo > $staleSeconds) {
+            // A worker busy with a long import cannot run heartbeat jobs, but the import records its own.
+            $busyWithImport = ImportJob::query()
+                ->whereIn('status', [ImportStatus::Preflight, ImportStatus::Importing])
+                ->where('heartbeat_at', '>=', now()->subSeconds($staleSeconds))
+                ->exists();
+
+            if ($busyWithImport) {
+                return SystemCheck::ok('Queue worker', 'Busy with an import (the import is reporting progress)');
+            }
+
             return SystemCheck::warning('Queue worker', "Last heartbeat {$secondsAgo} seconds ago", $hint);
         }
 

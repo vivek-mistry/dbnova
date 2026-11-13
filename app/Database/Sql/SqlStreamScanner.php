@@ -2,6 +2,8 @@
 
 namespace App\Database\Sql;
 
+use App\Database\Exceptions\SqlStatementTooLargeException;
+
 /**
  * Splits MySQL text into statements the way the mysql client does: a
  * delimiter (";" by default, changeable with DELIMITER) ends a statement
@@ -11,6 +13,10 @@ namespace App\Database\Sql;
  * tokens may span chunk boundaries) and returns the statements completed
  * so far, so a large dump can be split without loading it into memory.
  * Memory use is bounded by the largest single statement.
+ *
+ * The hot loop only finds boundaries and copies raw slices of the input;
+ * keyword and code analysis happen on demand in SqlStatement. This keeps
+ * multi-gigabyte dumps fast to scan.
  */
 class SqlStreamScanner
 {
@@ -30,23 +36,28 @@ class SqlStreamScanner
 
     private int $state = self::NORMAL;
 
-    /** Whether the current block comment is a /*! conditional comment (executed by MySQL). */
-    private bool $conditionalComment = false;
-
     /** Unprocessed input. */
     private string $buffer = '';
 
     /** The statement being built, as written. */
     private string $sql = '';
 
-    /** The statement being built, with strings, identifiers and comments blanked. */
-    private string $code = '';
-
-    /** The current line number (1-based). */
+    /** The line number at the start of $buffer (1-based). */
     private int $line = 1;
 
     /** The line the current statement started on, or 0 before its first code character. */
     private int $statementLine = 0;
+
+    /** Offset of the current statement's first code character in $this->sql. */
+    private int $codeOffset = 0;
+
+    /** Whether the current statement has a backslash outside strings (a mysql client command). */
+    private bool $backslashInCode = false;
+
+    /**
+     * @param  int  $maxStatementBytes  Fail when one statement grows past this size (0 = no limit).
+     */
+    public function __construct(private int $maxStatementBytes = 0) {}
 
     /**
      * Split a complete text into statements.
@@ -64,6 +75,8 @@ class SqlStreamScanner
      * Add input and return the statements it completed.
      *
      * @return list<SqlStatement>
+     *
+     * @throws SqlStatementTooLargeException
      */
     public function feed(string $chunk): array
     {
@@ -76,6 +89,8 @@ class SqlStreamScanner
      * Signal the end of input and return the final statement, if any.
      *
      * @return list<SqlStatement>
+     *
+     * @throws SqlStatementTooLargeException
      */
     public function finish(): array
     {
@@ -91,6 +106,15 @@ class SqlStreamScanner
     }
 
     /**
+     * Whether the input so far ends inside a string, quoted identifier or
+     * block comment, which means a truncated file once all input is fed.
+     */
+    public function isInsideLiteral(): bool
+    {
+        return in_array($this->state, [self::SINGLE_QUOTE, self::DOUBLE_QUOTE, self::BACKTICK, self::BLOCK_COMMENT], true);
+    }
+
+    /**
      * @return list<SqlStatement>
      */
     private function process(bool $final): array
@@ -99,126 +123,232 @@ class SqlStreamScanner
         $buffer = $this->buffer;
         $length = strlen($buffer);
         $position = 0;
+        // Start of the text not yet copied into $this->sql.
+        $segment = 0;
+        // Newlines before this offset are already counted in $this->line.
+        $counted = 0;
+        $stops = "'\"`#-/\\".$this->delimiter[0];
 
         while ($position < $length) {
-            $consumed = match ($this->state) {
-                self::NORMAL => $this->scanNormal($buffer, $position, $length, $final, $statements),
-                self::SINGLE_QUOTE => $this->scanQuoted($buffer, $position, $length, $final, "'"),
-                self::DOUBLE_QUOTE => $this->scanQuoted($buffer, $position, $length, $final, '"'),
-                self::BACKTICK => $this->scanQuoted($buffer, $position, $length, $final, '`'),
-                self::LINE_COMMENT => $this->scanLineComment($buffer, $position, $length),
-                default => $this->scanBlockComment($buffer, $position, $length, $final),
-            };
+            $state = $this->state;
 
-            if ($consumed === 0) {
-                break; // Need more input to decide.
+            if ($state === self::SINGLE_QUOTE || $state === self::DOUBLE_QUOTE || $state === self::BACKTICK) {
+                $quote = $state === self::SINGLE_QUOTE ? "'" : ($state === self::DOUBLE_QUOTE ? '"' : '`');
+                $quoteStops = $quote === '`' ? '`' : $quote.'\\';
+
+                while (true) {
+                    $position += strcspn($buffer, $quoteStops, $position);
+
+                    if ($position >= $length) {
+                        break;
+                    }
+
+                    if ($buffer[$position] === '\\') {
+                        if ($position + 1 >= $length && ! $final) {
+                            break 2; // The escaped character is in the next chunk.
+                        }
+
+                        $position += 2;
+
+                        continue;
+                    }
+
+                    if ($position + 1 >= $length && ! $final) {
+                        break 2; // It might be a doubled quote.
+                    }
+
+                    if (($buffer[$position + 1] ?? '') === $quote) {
+                        $position += 2;
+
+                        continue;
+                    }
+
+                    $position++;
+                    $this->state = self::NORMAL;
+
+                    break;
+                }
+
+                $position = min($position, $length);
+
+                continue;
             }
 
-            $position += $consumed;
+            if ($state === self::LINE_COMMENT) {
+                $lineEnd = strpos($buffer, "\n", $position);
+
+                if ($lineEnd === false) {
+                    $position = $length;
+                } else {
+                    $position = $lineEnd + 1;
+                    $this->state = self::NORMAL;
+                }
+
+                continue;
+            }
+
+            if ($state === self::BLOCK_COMMENT) {
+                $close = strpos($buffer, '*/', $position);
+
+                if ($close !== false) {
+                    $position = $close + 2;
+                    $this->state = self::NORMAL;
+
+                    continue;
+                }
+
+                // Keep a trailing "*" in case "*/" is split across chunks.
+                $end = $final ? $length : max($position, $length - 1);
+
+                if ($end === $position) {
+                    break;
+                }
+
+                $position = $end;
+
+                continue;
+            }
+
+            if ($this->statementLine === 0) {
+                // Before a statement's first code: skip whitespace on its own so a
+                // DELIMITER directive at the start of the next line is noticed.
+                $whitespace = strspn($buffer, " \t\r\n", $position);
+
+                if ($whitespace > 0) {
+                    $position += $whitespace;
+
+                    continue;
+                }
+
+                if ($buffer[$position] === 'D' || $buffer[$position] === 'd') {
+                    $directiveEnd = $this->delimiterDirectiveEnd($buffer, $position, $length, $final);
+
+                    if ($directiveEnd === 0) {
+                        break; // Need more input to tell.
+                    }
+
+                    if ($directiveEnd !== null) {
+                        $this->sql = '';
+                        $position = $segment = $directiveEnd;
+                        $stops = "'\"`#-/\\".$this->delimiter[0];
+
+                        continue;
+                    }
+                }
+            }
+
+            $character = $buffer[$position];
+
+            if ($character === $this->delimiter[0]) {
+                $delimiterLength = strlen($this->delimiter);
+
+                if ($length - $position < $delimiterLength && ! $final && str_starts_with($this->delimiter, substr($buffer, $position))) {
+                    break; // A delimiter may continue in the next chunk.
+                }
+
+                if (substr_compare($buffer, $this->delimiter, $position, $delimiterLength) === 0) {
+                    $this->sql .= substr($buffer, $segment, $position - $segment);
+                    $statement = $this->emit();
+
+                    if ($statement !== null) {
+                        $statements[] = $statement;
+                    }
+
+                    $position = $segment = $position + $delimiterLength;
+
+                    continue;
+                }
+            }
+
+            if ($character === "'" || $character === '"' || $character === '`') {
+                $this->markStatementStart($buffer, $position, $segment, $counted);
+                $this->state = $character === "'" ? self::SINGLE_QUOTE : ($character === '"' ? self::DOUBLE_QUOTE : self::BACKTICK);
+                $position++;
+
+                continue;
+            }
+
+            if ($character === '#') {
+                $this->state = self::LINE_COMMENT;
+                $position++;
+
+                continue;
+            }
+
+            if ($character === '-' || $character === '/') {
+                $next = $buffer[$position + 1] ?? null;
+                $third = $buffer[$position + 2] ?? null;
+
+                // Both comment openers need up to two more characters to recognise.
+                if (! $final && ($next === null || ($next === ($character === '-' ? '-' : '*') && $third === null))) {
+                    break;
+                }
+
+                // "--" starts a comment only when followed by whitespace or the end. This is
+                // the mysql client's rule (the server also accepts control characters), and
+                // imports are split by the client, so the scanner must agree with it.
+                if ($character === '-' && $next === '-' && ($third === null || ctype_space($third))) {
+                    $this->state = self::LINE_COMMENT;
+                    $position += 2;
+
+                    continue;
+                }
+
+                if ($character === '/' && $next === '*') {
+                    if ($third === '!') {
+                        // MySQL executes conditional comments, so they are code.
+                        $this->markStatementStart($buffer, $position, $segment, $counted);
+                    }
+
+                    $this->state = self::BLOCK_COMMENT;
+                    $position += 2;
+
+                    continue;
+                }
+            }
+
+            if ($character === '\\') {
+                // Outside strings a backslash is a mysql client command (\C, \G, ...).
+                $this->backslashInCode = true;
+            }
+
+            // A run of ordinary characters.
+            $this->markStatementStart($buffer, $position, $segment, $counted);
+            $position += 1 + strcspn($buffer, $stops, $position + 1);
         }
 
+        $this->sql .= substr($buffer, $segment, $position - $segment);
+        $this->line += substr_count($buffer, "\n", $counted, $position - $counted);
         $this->buffer = substr($buffer, $position);
+
+        // Unconsumed input counts too: a DELIMITER line without a newline would otherwise grow forever.
+        if ($this->maxStatementBytes > 0 && strlen($this->sql) + strlen($this->buffer) > $this->maxStatementBytes) {
+            throw new SqlStatementTooLargeException($this->statementLine > 0 ? $this->statementLine : $this->line, $this->maxStatementBytes);
+        }
 
         return $statements;
     }
 
     /**
-     * @param  list<SqlStatement>  $statements
+     * Record the line of the current statement's first code character.
      */
-    private function scanNormal(string $buffer, int $position, int $length, bool $final, array &$statements): int
+    private function markStatementStart(string $buffer, int $position, int $segment, int &$counted): void
     {
-        if ($this->statementLine === 0) {
-            // Before a statement's first code: copy whitespace on its own so a
-            // DELIMITER directive at the start of the next line is noticed.
-            $whitespace = strspn($buffer, " \t\r\n", $position);
-
-            if ($whitespace > 0) {
-                $text = substr($buffer, $position, $whitespace);
-                $this->appendSql($text, $text);
-
-                return $whitespace;
-            }
-
-            $directive = $this->delimiterDirectiveLength($buffer, $position, $length, $final);
-
-            if ($directive !== null) {
-                return $directive;
-            }
+        if ($this->statementLine !== 0) {
+            return;
         }
 
-        $delimiterLength = strlen($this->delimiter);
-        $available = $length - $position;
-
-        if ($available < $delimiterLength && ! $final && str_starts_with($this->delimiter, substr($buffer, $position))) {
-            return 0; // A delimiter may continue in the next chunk.
-        }
-
-        if ($available >= $delimiterLength && substr_compare($buffer, $this->delimiter, $position, $delimiterLength) === 0) {
-            $statement = $this->emit();
-
-            if ($statement !== null) {
-                $statements[] = $statement;
-            }
-
-            return $delimiterLength;
-        }
-
-        $character = $buffer[$position];
-        $next = $buffer[$position + 1] ?? null;
-        $third = $buffer[$position + 2] ?? null;
-
-        if ($character === "'") {
-            return $this->open(self::SINGLE_QUOTE, $character);
-        }
-
-        if ($character === '"') {
-            return $this->open(self::DOUBLE_QUOTE, $character);
-        }
-
-        if ($character === '`') {
-            return $this->open(self::BACKTICK, $character);
-        }
-
-        if ($character === '#') {
-            return $this->open(self::LINE_COMMENT, $character);
-        }
-
-        if ($character === '-' || $character === '/') {
-            // Both comment openers need up to two more characters to recognise.
-            if (! $final && ($next === null || ($next === ($character === '-' ? '-' : '*') && $third === null))) {
-                return 0;
-            }
-
-            // "--" starts a comment only when followed by whitespace or the end.
-            if ($character === '-' && $next === '-' && ($third === null || ctype_space($third) || ctype_cntrl($third))) {
-                $this->appendSql('--', '  ');
-                $this->state = self::LINE_COMMENT;
-
-                return 2;
-            }
-
-            if ($character === '/' && $next === '*') {
-                $this->conditionalComment = $third === '!';
-                $this->state = self::BLOCK_COMMENT;
-                $this->appendSql('/*', '  ');
-
-                return 2;
-            }
-        }
-
-        // Copy a run of ordinary characters at once.
-        $run = max(strcspn($buffer, "'\"`#-/".$this->delimiter[0], $position), 1);
-        $text = substr($buffer, $position, $run);
-        $this->appendSql($text, $text);
-
-        return $run;
+        $this->line += substr_count($buffer, "\n", $counted, $position - $counted);
+        $counted = $position;
+        $this->statementLine = $this->line;
+        $this->codeOffset = strlen($this->sql) + $position - $segment;
     }
 
     /**
-     * The length of a DELIMITER directive line starting here, 0 when more
-     * input is needed to tell, or null when this is not a directive.
+     * The offset just after a DELIMITER directive line starting here, 0 when
+     * more input is needed to tell, or null when this is not a directive.
      */
-    private function delimiterDirectiveLength(string $buffer, int $position, int $length, bool $final): ?int
+    private function delimiterDirectiveEnd(string $buffer, int $position, int $length, bool $final): ?int
     {
         $start = substr($buffer, $position, 10);
 
@@ -230,11 +360,6 @@ class SqlStreamScanner
             return null;
         }
 
-        return $this->scanDelimiterDirective($buffer, $position, $length, $final);
-    }
-
-    private function scanDelimiterDirective(string $buffer, int $position, int $length, bool $final): int
-    {
         $lineEnd = strpos($buffer, "\n", $position);
 
         if ($lineEnd === false && ! $final) {
@@ -249,126 +374,23 @@ class SqlStreamScanner
             $this->delimiter = $newDelimiter;
         }
 
-        $this->sql = '';
-        $this->code = '';
-        $this->line += substr_count($buffer, "\n", $position, $end - $position);
-
-        return $end - $position;
-    }
-
-    private function scanQuoted(string $buffer, int $position, int $length, bool $final, string $quote): int
-    {
-        $character = $buffer[$position];
-
-        if ($character === '\\' && $quote !== '`') {
-            if ($position + 1 >= $length) {
-                if (! $final) {
-                    return 0;
-                }
-
-                $this->appendSql($character, ' ');
-
-                return 1;
-            }
-
-            $escaped = substr($buffer, $position, 2);
-            $this->appendSql($escaped, str_repeat(' ', strlen($escaped)));
-
-            return 2;
-        }
-
-        if ($character === $quote) {
-            if ($position + 1 >= $length && ! $final) {
-                return 0; // It might be a doubled quote.
-            }
-
-            if (($buffer[$position + 1] ?? '') === $quote) {
-                $this->appendSql($quote.$quote, '  ');
-
-                return 2;
-            }
-
-            $this->appendSql($quote, $quote);
-            $this->state = self::NORMAL;
-
-            return 1;
-        }
-
-        $run = max(strcspn($buffer, $quote.'\\', $position), 1);
-        $text = substr($buffer, $position, $run);
-        $this->appendSql($text, preg_replace('/[^\n]/', ' ', $text) ?? '');
-
-        return $run;
-    }
-
-    private function scanLineComment(string $buffer, int $position, int $length): int
-    {
-        $lineEnd = strpos($buffer, "\n", $position);
-        $end = $lineEnd === false ? $length : $lineEnd + 1;
-        $text = substr($buffer, $position, $end - $position);
-
-        $this->appendSql($text, preg_replace('/[^\n]/', ' ', $text) ?? '');
-
-        if ($lineEnd !== false) {
-            $this->state = self::NORMAL;
-        }
-
-        return $end - $position;
-    }
-
-    private function scanBlockComment(string $buffer, int $position, int $length, bool $final): int
-    {
-        $close = strpos($buffer, '*/', $position);
-
-        if ($close === false) {
-            // Keep a trailing "*" in case "*/" is split across chunks.
-            $end = $final ? $length : max($position, $length - 1);
-
-            if ($end === $position) {
-                return 0;
-            }
-
-            $text = substr($buffer, $position, $end - $position);
-            $this->appendSql($text, $this->conditionalComment ? $text : (preg_replace('/[^\n]/', ' ', $text) ?? ''));
-
-            return $end - $position;
-        }
-
-        $text = substr($buffer, $position, $close + 2 - $position);
-        $this->appendSql($text, $this->conditionalComment ? $text : (preg_replace('/[^\n]/', ' ', $text) ?? ''));
-        $this->state = self::NORMAL;
-        $this->conditionalComment = false;
-
-        return $close + 2 - $position;
-    }
-
-    private function open(int $state, string $character): int
-    {
-        $this->state = $state;
-        $this->appendSql($character, $state === self::LINE_COMMENT ? ' ' : $character);
-
-        return 1;
-    }
-
-    private function appendSql(string $sql, string $code): void
-    {
-        if ($this->statementLine === 0 && trim($code) !== '') {
-            $this->statementLine = $this->line + substr_count($sql, "\n", 0, strspn($sql, " \t\r\n"));
-        }
-
-        $this->sql .= $sql;
-        $this->code .= $code;
-        $this->line += substr_count($sql, "\n");
+        return $end;
     }
 
     private function emit(): ?SqlStatement
     {
-        $statement = trim($this->code) === ''
-            ? null
-            : new SqlStatement(trim($this->sql), trim($this->code), $this->statementLine);
+        $statement = null;
+
+        if ($this->statementLine !== 0) {
+            // Leading comments are part of the statement text; the text starts this many lines earlier.
+            $leadingWhitespace = strspn($this->sql, " \t\r\n");
+            $commentLines = substr_count($this->sql, "\n", $leadingWhitespace, max(0, $this->codeOffset - $leadingWhitespace));
+
+            $statement = new SqlStatement(trim($this->sql), $this->statementLine, $this->delimiter, $this->statementLine - $commentLines, $this->backslashInCode);
+        }
 
         $this->sql = '';
-        $this->code = '';
+        $this->backslashInCode = false;
         $this->statementLine = 0;
 
         return $statement;

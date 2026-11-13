@@ -1,5 +1,6 @@
 <?php
 
+use App\Database\Exceptions\SqlStatementTooLargeException;
 use App\Database\Sql\SqlStatement;
 use App\Database\Sql\SqlStreamScanner;
 
@@ -42,6 +43,8 @@ test('statements are split on the delimiter only outside strings, identifiers an
     'doubled quote' => ["SELECT 'it''s;'; SELECT 2", ["SELECT 'it''s;'", 'SELECT 2']],
     'doubled backtick' => ['SELECT `a``;b`; SELECT 2', ['SELECT `a``;b`', 'SELECT 2']],
     'double-dash comment' => ["SELECT 1 -- ; not a delimiter\n; SELECT 2", ['SELECT 1 -- ; not a delimiter', 'SELECT 2']],
+    // The mysql client (which runs imports) only treats "--" + whitespace as a comment.
+    'double-dash before a control character is not a comment' => ["SELECT 1 --\x01;USE other;", ["SELECT 1 --\x01", 'USE other']],
     'double-dash without a space is an operator' => ['SELECT 5--2; SELECT 3', ['SELECT 5--2', 'SELECT 3']],
     'hash comment' => ["SELECT 1 # ; not a delimiter\n; SELECT 2", ['SELECT 1 # ; not a delimiter', 'SELECT 2']],
     'block comment' => ['SELECT /* ; */ 1; SELECT 2', ['SELECT /* ; */ 1', 'SELECT 2']],
@@ -92,6 +95,60 @@ test('any chunking produces the same statements as the whole text', function (in
 
     expect(statementsInChunks($sql, $chunkSize))->toBe(statementsOf($sql));
 })->with([1, 2, 3, 5, 7, 11, 64]);
+
+test('statements carry the delimiter that ended them', function () {
+    $statements = SqlStreamScanner::split("SELECT 1;\nDELIMITER ;;\nCREATE TRIGGER t BEGIN SET @a = 1; END;;\nDELIMITER ;\nSELECT 2;");
+
+    expect(array_map(fn (SqlStatement $statement): string => $statement->delimiter, $statements))->toBe([';', ';;', ';']);
+});
+
+test('a text that ends inside a string or block comment is reported as truncated', function (string $sql, bool $truncated) {
+    $scanner = new SqlStreamScanner;
+    $scanner->feed($sql);
+    $scanner->finish();
+
+    expect($scanner->isInsideLiteral())->toBe($truncated);
+})->with([
+    'complete' => ["INSERT INTO t VALUES ('a');", false],
+    'open string' => ["INSERT INTO t VALUES ('a", true],
+    'open identifier' => ['SELECT `a', true],
+    'open block comment' => ['SELECT 1 /* never closed', true],
+    'open line comment is fine' => ['SELECT 1 -- trailing', false],
+]);
+
+test('statements know where their text starts and whether they hold a client command', function () {
+    $statements = SqlStreamScanner::split("SET @a = 1;\n-- note\n# more\nINSERT INTO t\nVALUES ('a\\\\b');\nSET @b = 2\n\\C gbk\n;");
+
+    expect(array_map(fn (SqlStatement $statement): array => [$statement->firstLine, $statement->line, $statement->hasClientCommand], $statements))
+        ->toBe([[1, 1, false], [2, 4, false], [6, 6, true]]);
+});
+
+test('unconsumed input counts toward the size limit, so a DELIMITER line without a newline cannot grow forever', function () {
+    $scanner = new SqlStreamScanner(maxStatementBytes: 1024);
+
+    expect(fn () => $scanner->feed('DELIMITER '.str_repeat('x', 2048)))->toThrow(SqlStatementTooLargeException::class);
+});
+
+test('a statement larger than the limit stops the scan with its line', function () {
+    $scanner = new SqlStreamScanner(maxStatementBytes: 1024);
+    $scanner->feed("SELECT 1;\n\nINSERT INTO t VALUES ('".str_repeat('x', 600));
+
+    expect(fn () => $scanner->feed(str_repeat('y', 600)))
+        ->toThrow(SqlStatementTooLargeException::class, 'line 3');
+});
+
+test('leading tokens skip comments, unquote identifiers and read conditional comments', function () {
+    $statement = SqlStreamScanner::split("-- note\nCREATE DATABASE /*!32312 IF NOT EXISTS*/ `my``shop` /*!40100 DEFAULT CHARACTER SET utf8mb4 */")[0];
+
+    expect($statement->leadingTokens(6))->toBe([
+        ['type' => 'word', 'value' => 'CREATE'],
+        ['type' => 'word', 'value' => 'DATABASE'],
+        ['type' => 'word', 'value' => 'IF'],
+        ['type' => 'word', 'value' => 'NOT'],
+        ['type' => 'word', 'value' => 'EXISTS'],
+        ['type' => 'identifier', 'value' => 'my`shop'],
+    ]);
+});
 
 test('a statement is available as soon as its delimiter arrives', function () {
     $scanner = new SqlStreamScanner;

@@ -59,6 +59,9 @@ return [
     'limits' => [
         'upload_chunk_bytes' => (int) env('DBNOVA_UPLOAD_CHUNK_BYTES', 16 * 1024 * 1024),
         'pump_chunk_bytes' => (int) env('DBNOVA_PUMP_CHUNK_BYTES', 1024 * 1024),
+        'max_upload_bytes' => (int) env('DBNOVA_MAX_UPLOAD_BYTES', 100 * 1024 * 1024 * 1024),
+        // One statement in an imported file may not exceed this (mysqldump writes about 1 MB per INSERT).
+        'max_statement_bytes' => (int) env('DBNOVA_MAX_STATEMENT_BYTES', 64 * 1024 * 1024),
         'page_size' => (int) env('DBNOVA_PAGE_SIZE', 100),
         'query_row_cap' => (int) env('DBNOVA_QUERY_ROW_CAP', 1000),
         'query_timeout_ms' => (int) env('DBNOVA_QUERY_TIMEOUT_MS', 30000),
@@ -75,6 +78,7 @@ return [
 
     'retention' => [
         'failed_import_hours' => (int) env('DBNOVA_FAILED_IMPORT_HOURS', 24),
+        'incomplete_upload_hours' => (int) env('DBNOVA_INCOMPLETE_UPLOAD_HOURS', 24),
         'export_link_minutes' => (int) env('DBNOVA_EXPORT_LINK_MINUTES', 60),
     ],
 
