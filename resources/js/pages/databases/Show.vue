@@ -2,6 +2,7 @@
 import { Head, Link, setLayoutProps, usePage } from '@inertiajs/vue3';
 import { Eye, Table2 } from '@lucide/vue';
 import DropDatabaseDialog from '@/components/database/DropDatabaseDialog.vue';
+import CreateTableDialog from '@/components/schema/CreateTableDialog.vue';
 import RenameDatabaseDialog from '@/components/database/RenameDatabaseDialog.vue';
 import Heading from '@/components/Heading.vue';
 import { Badge } from '@/components/ui/badge';
@@ -9,12 +10,15 @@ import { Card } from '@/components/ui/card';
 import { formatBytes, formatNumber } from '@/lib/format';
 import { index, show } from '@/routes/databases';
 import { show as tableShow } from '@/routes/tables';
-import type { DatabaseInfo, TableInfo } from '@/types';
+import type { CollationInfo, DatabaseInfo, TableInfo } from '@/types';
 
 const props = defineProps<{
     database: DatabaseInfo;
     tables: TableInfo[];
     renameBlockers: string[];
+    columnTypes: string[];
+    engines: string[];
+    collations?: CollationInfo[];
 }>();
 
 setLayoutProps({
@@ -37,6 +41,13 @@ const page = usePage();
                 :description="`${formatNumber(database.tableCount)} tables · ${formatBytes(database.sizeBytes)} · ${database.collation}`"
             />
             <div v-if="!database.isSystem" class="flex gap-2">
+                <CreateTableDialog
+                    :database="database.name"
+                    :column-types="columnTypes"
+                    :engines="engines"
+                    :collations="collations"
+                    :disabled="page.props.dbnova.readOnly"
+                />
                 <RenameDatabaseDialog
                     :database="database.name"
                     :blockers="renameBlockers"

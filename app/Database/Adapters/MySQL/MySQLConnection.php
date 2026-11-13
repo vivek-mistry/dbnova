@@ -87,6 +87,22 @@ class MySQLConnection
     }
 
     /**
+     * Quote a string literal for this server (respects its SQL mode).
+     *
+     * @throws DatabaseOperationException
+     */
+    public function quote(string $value): string
+    {
+        $quoted = $this->pdo()->quote($value);
+
+        if ($quoted === false) {
+            throw new DatabaseOperationException('The MySQL driver could not quote a value.');
+        }
+
+        return $quoted;
+    }
+
+    /**
      * Run an INSERT, UPDATE or DELETE and return the number of rows it matched.
      *
      * @param  list<mixed>  $bindings

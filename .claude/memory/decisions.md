@@ -27,3 +27,6 @@ Newest entries go at the bottom. Use the format `YYYY-MM-DD — Decision — Why
 - 2026-10-30 — Row edits are key-only (PK or NOT NULL unique key): UPDATE … WHERE key LIMIT 1, and DELETE by key in one transaction (≤ 1,000 per request). Keyless tables, views, binary and generated columns aren't editable in the grid. — Never touch the wrong row. — —
 - 2026-10-30 — Audit entries for row changes store column names and counts, never values. — Table data may be sensitive. — —
 - 2026-10-30 — Created MySQL user `dbnova_test` (password `test`, grants only on `dbnova_test` and `dbnova\_test\_%`) and database `dbnova_test` at the user's request, for real-MySQL tests. Kept for future phases. — The user asked for it. — —
+- 2026-10-30 — Schema changes run online first (INSTANT → INPLACE, LOCK=NONE → COPY). A COPY on a table over `dbnova.limits.locking_ddl_confirm_rows` (1M) needs explicit confirmation (HTTP 409 → "Run anyway"). DDL runs in the request, not a queue. — The user chose it. — —
+- 2026-10-30 — Schema editing uses per-action dialogs (Structure tab) plus a Create-table form, every one through the shared preview → run dialog. — The user chose it. — —
+- 2026-10-30 — Drop column, truncate and drop table need the typed table name + MySQL password at apply time (not at preview). — Same pattern as drop database. — ADR 0008

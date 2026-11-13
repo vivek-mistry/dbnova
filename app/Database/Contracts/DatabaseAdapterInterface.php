@@ -20,4 +20,6 @@ interface DatabaseAdapterInterface
     public function browser(): TableBrowserInterface;
 
     public function records(): RecordManagerInterface;
+
+    public function tables(): TableManagerInterface;
 }

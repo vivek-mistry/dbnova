@@ -33,7 +33,7 @@ class MySQLTableBrowser implements TableBrowserInterface
     {
         $rows = $this->connection->select(
             'SELECT COLUMN_NAME, DATA_TYPE, COLUMN_TYPE, IS_NULLABLE, COLUMN_KEY, COLUMN_DEFAULT, EXTRA,
-                CHARACTER_MAXIMUM_LENGTH, COLUMN_COMMENT
+                CHARACTER_MAXIMUM_LENGTH, COLUMN_COMMENT, COLLATION_NAME
             FROM information_schema.COLUMNS
             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
             ORDER BY ORDINAL_POSITION',
@@ -50,6 +50,7 @@ class MySQLTableBrowser implements TableBrowserInterface
             extra: (string) $row['EXTRA'],
             maxLength: $row['CHARACTER_MAXIMUM_LENGTH'] === null ? null : (int) $row['CHARACTER_MAXIMUM_LENGTH'],
             comment: (string) $row['COLUMN_COMMENT'],
+            collation: isset($row['COLLATION_NAME']) ? (string) $row['COLLATION_NAME'] : null,
         ), $rows);
     }
 

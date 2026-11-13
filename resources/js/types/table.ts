@@ -9,6 +9,7 @@ export type ColumnInfo = {
     default: string | null;
     extra: string;
     comment: string;
+    collation: string | null;
     isBinary: boolean;
 };
 

@@ -21,8 +21,8 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Row values and filters are data: keep '' distinct from NULL and keep surrounding spaces.
         // These run before routing, so match the path rather than the route name.
-        $middleware->trimStrings(except: [fn (Request $request) => $request->is('databases/*/tables/*')]);
-        $middleware->convertEmptyStringsToNull(except: [fn (Request $request) => $request->is('databases/*/tables/*')]);
+        $middleware->trimStrings(except: [fn (Request $request) => $request->is('databases/*/tables/*', 'databases/*/schema/*')]);
+        $middleware->convertEmptyStringsToNull(except: [fn (Request $request) => $request->is('databases/*/tables/*', 'databases/*/schema/*')]);
 
         $middleware->web(append: [
             HandleAppearance::class,

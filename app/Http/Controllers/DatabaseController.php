@@ -74,6 +74,12 @@ class DatabaseController extends Controller
             'database' => $databaseInfo->toArray(),
             'tables' => array_map(fn (TableInfo $table): array => $table->toArray(), $schema->tables($database)),
             'renameBlockers' => $databaseInfo->isSystem ? [] : $schema->renameBlockers($database),
+            'columnTypes' => $this->adapter->tables()->columnTypes(),
+            'engines' => $this->adapter->tables()->engines(),
+            'collations' => Inertia::defer(fn (): array => array_map(
+                fn (CollationInfo $collation): array => $collation->toArray(),
+                $schema->collations(),
+            )),
         ]);
     }
 

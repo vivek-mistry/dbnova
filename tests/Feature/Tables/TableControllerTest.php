@@ -4,6 +4,7 @@ use App\Database\DTOs\ColumnInfo;
 use App\Database\DTOs\IndexInfo;
 use App\Database\DTOs\Page;
 use App\Database\DTOs\PageRequest;
+use App\Database\DTOs\Schema\ForeignKeyInfo;
 use App\Database\DTOs\TableInfo;
 use App\Database\DTOs\TableRef;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -50,9 +51,17 @@ test('browsing a table renders its columns, key and first page', function () {
     );
 });
 
-test('the structure tab shows columns, indexes and the CREATE statement', function () {
-    ['schema' => $schema, 'browser' => $browser] = fakeDatabaseAdapter();
+test('the structure tab shows columns, indexes, foreign keys and the CREATE statement', function () {
+    ['schema' => $schema, 'browser' => $browser, 'tables' => $tables] = fakeDatabaseAdapter();
     $schema->shouldReceive('table')->andReturn(ordersTable());
+    $schema->shouldReceive('tables')->with('shop')->andReturn([
+        ordersTable(),
+        new TableInfo('customers', 'table', 'InnoDB', 10, 16384, null),
+        new TableInfo('order_totals', 'view', null, null, null, null),
+    ]);
+    $tables->shouldReceive('foreignKeys')->andReturn([
+        new ForeignKeyInfo('orders_customer_id_foreign', ['customer_id'], 'shop', 'customers', ['id'], 'CASCADE', 'RESTRICT'),
+    ]);
     $browser->shouldReceive('columns')->andReturn([idColumn()]);
     $browser->shouldReceive('indexes')->andReturn([new IndexInfo('PRIMARY', ['id'], true, 'BTREE')]);
     $browser->shouldReceive('createStatement')->andReturn('CREATE TABLE `orders` (`id` int unsigned NOT NULL)');
@@ -64,6 +73,11 @@ test('the structure tab shows columns, indexes and the CREATE statement', functi
         ->component('tables/Structure')
         ->where('indexes', [['name' => 'PRIMARY', 'columns' => ['id'], 'unique' => true, 'type' => 'BTREE']])
         ->where('createStatement', 'CREATE TABLE `orders` (`id` int unsigned NOT NULL)')
+        ->where('foreignKeys.0.name', 'orders_customer_id_foreign')
+        ->where('foreignKeys.0.referencedTable', 'customers')
+        ->where('otherTables', ['orders', 'customers'])
+        ->where('columnTypes', ['int', 'varchar', 'text'])
+        ->missing('collations')
     );
 });
 

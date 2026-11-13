@@ -4,6 +4,7 @@ use App\Database\Contracts\DatabaseAdapterInterface;
 use App\Database\Contracts\RecordManagerInterface;
 use App\Database\Contracts\SchemaManagerInterface;
 use App\Database\Contracts\TableBrowserInterface;
+use App\Database\Contracts\TableManagerInterface;
 use App\Models\User;
 use App\Services\Auth\MySQLCredentialStore;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -75,22 +76,27 @@ function fakeSchemaManager(): MockInterface
 
 /**
  * Replace the managed-database adapter with one whose schema manager, table
- * browser and record manager are mocks.
+ * browser, record manager and table manager are mocks.
  *
- * @return array{schema: MockInterface, browser: MockInterface, records: MockInterface}
+ * @return array{schema: MockInterface, browser: MockInterface, records: MockInterface, tables: MockInterface}
  */
 function fakeDatabaseAdapter(): array
 {
     $schema = Mockery::mock(SchemaManagerInterface::class);
     $browser = Mockery::mock(TableBrowserInterface::class);
     $records = Mockery::mock(RecordManagerInterface::class);
+    $tables = Mockery::mock(TableManagerInterface::class);
+    $tables->shouldReceive('columnTypes')->andReturn(['int', 'varchar', 'text'])->byDefault();
+    $tables->shouldReceive('engines')->andReturn(['InnoDB'])->byDefault();
+    $tables->shouldReceive('foreignKeys')->andReturn([])->byDefault();
 
     test()->mock(DatabaseAdapterInterface::class, fn (MockInterface $adapter) => $adapter
         ->shouldReceive('schema')->andReturn($schema)
         ->shouldReceive('browser')->andReturn($browser)
-        ->shouldReceive('records')->andReturn($records));
+        ->shouldReceive('records')->andReturn($records)
+        ->shouldReceive('tables')->andReturn($tables));
 
-    return ['schema' => $schema, 'browser' => $browser, 'records' => $records];
+    return ['schema' => $schema, 'browser' => $browser, 'records' => $records, 'tables' => $tables];
 }
 
 /**

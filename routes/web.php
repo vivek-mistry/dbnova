@@ -4,6 +4,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\DatabaseTreeController;
 use App\Http\Controllers\RecordController;
+use App\Http\Controllers\SchemaChangeController;
 use App\Http\Controllers\SystemController;
 use App\Http\Controllers\TableController;
 use App\Http\Controllers\TableRowsController;
@@ -18,6 +19,9 @@ Route::middleware(['auth', EnsureMySQLCredentials::class])->group(function () {
     Route::resource('databases', DatabaseController::class)
         ->only(['index', 'store', 'show', 'update', 'destroy'])
         ->parameters(['databases' => 'database']);
+
+    Route::post('databases/{database}/schema/preview', [SchemaChangeController::class, 'preview'])->name('schema.preview');
+    Route::post('databases/{database}/schema/apply', [SchemaChangeController::class, 'apply'])->name('schema.apply');
 
     Route::prefix('databases/{database}/tables/{table}')->name('tables.')->group(function () {
         Route::get('/', [TableController::class, 'show'])->name('show');

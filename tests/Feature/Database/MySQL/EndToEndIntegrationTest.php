@@ -7,7 +7,7 @@ use Inertia\Testing\AssertableInertia as Assert;
 
 /**
  * The whole stack against a real MySQL server, with nothing mocked: login,
- * database explorer, table browser and record editing. Runs when
+ * database explorer, schema changes, table browser and record editing. Runs when
  * DBNOVA_TEST_DB_USERNAME is set.
  */
 beforeEach(function () {
@@ -36,11 +36,27 @@ test('a MySQL user can log in, manage a database and edit its rows', function ()
     $this->post(route('databases.store'), ['name' => $this->database])
         ->assertRedirect(route('databases.show', $this->database));
 
-    app(MySQLConnection::class)->statement("CREATE TABLE `{$this->database}`.`orders` (
-        id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        status VARCHAR(20) NOT NULL DEFAULT 'new',
-        notes TEXT NULL
-    )");
+    $createTable = [
+        'table' => 'orders',
+        'change' => [
+            'type' => 'create_table',
+            'columns' => [
+                ['name' => 'id', 'type' => 'int', 'unsigned' => true, 'nullable' => false, 'autoIncrement' => true],
+                ['name' => 'status', 'type' => 'varchar', 'length' => '20', 'nullable' => false, 'default' => ['kind' => 'value', 'value' => 'new']],
+                ['name' => 'notes', 'type' => 'text'],
+            ],
+            'primaryKey' => ['id'],
+            'engine' => 'InnoDB',
+        ],
+    ];
+
+    $this->postJson(route('schema.preview', $this->database), $createTable)
+        ->assertOk()
+        ->assertJsonPath('statements.0', "CREATE TABLE `{$this->database}`.`orders` (\n  `id` int UNSIGNED NOT NULL AUTO_INCREMENT,\n  `status` varchar(20) NOT NULL DEFAULT 'new',\n  `notes` text NULL,\n  PRIMARY KEY (`id`)\n) ENGINE=InnoDB");
+    $this->postJson(route('schema.apply', $this->database), $createTable)
+        ->assertOk()
+        ->assertJsonPath('redirect', "/databases/{$this->database}/tables/orders/structure");
+
     app(MySQLConnection::class)->statement("INSERT INTO `{$this->database}`.`orders` (status, notes) VALUES ('new', 'first'), ('paid', NULL)");
 
     $tableArgs = ['database' => $this->database, 'table' => 'orders'];
@@ -79,6 +95,7 @@ test('a MySQL user can log in, manage a database and edit its rows', function ()
 
     expect(AuditLog::query()->orderBy('id')->pluck('action')->all())->toBe([
         'database.create',
+        'schema.create_table',
         'record.update',
         'record.insert',
         'record.delete',

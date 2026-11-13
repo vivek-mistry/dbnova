@@ -36,6 +36,7 @@ final readonly class ColumnInfo
         public string $extra,
         public ?int $maxLength,
         public string $comment,
+        public ?string $collation = null,
     ) {}
 
     public function isBinary(): bool
@@ -53,7 +54,7 @@ final readonly class ColumnInfo
     }
 
     /**
-     * @return array{name: string, dataType: string, columnType: string, nullable: bool, key: string, default: string|null, extra: string, comment: string, isBinary: bool}
+     * @return array{name: string, dataType: string, columnType: string, nullable: bool, key: string, default: string|null, extra: string, comment: string, collation: string|null, isBinary: bool}
      */
     public function toArray(): array
     {
@@ -66,6 +67,7 @@ final readonly class ColumnInfo
             'default' => $this->default,
             'extra' => $this->extra,
             'comment' => $this->comment,
+            'collation' => $this->collation,
             'isBinary' => $this->isBinary(),
         ];
     }

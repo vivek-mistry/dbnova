@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Database\Contracts\DatabaseAdapterInterface;
+use App\Database\DTOs\CollationInfo;
 use App\Database\DTOs\ColumnInfo;
 use App\Database\DTOs\IndexInfo;
 use App\Database\DTOs\PageRequest;
+use App\Database\DTOs\Schema\ForeignKeyInfo;
 use App\Database\DTOs\TableInfo;
 use App\Database\DTOs\TableRef;
 use Inertia\Inertia;
@@ -49,7 +51,19 @@ class TableController extends Controller
             'table' => $tableInfo->toArray(),
             'columns' => array_map(fn (ColumnInfo $column): array => $column->toArray(), $browser->columns($tableRef)),
             'indexes' => array_map(fn (IndexInfo $index): array => $index->toArray(), $browser->indexes($tableRef)),
+            'foreignKeys' => $tableInfo->type === 'table'
+                ? array_map(fn (ForeignKeyInfo $foreignKey): array => $foreignKey->toArray(), $this->adapter->tables()->foreignKeys($tableRef))
+                : [],
             'createStatement' => $browser->createStatement($tableRef),
+            'otherTables' => array_values(array_map(
+                fn (TableInfo $other): string => $other->name,
+                array_filter($this->adapter->schema()->tables($database), fn (TableInfo $other): bool => $other->type === 'table'),
+            )),
+            'columnTypes' => $this->adapter->tables()->columnTypes(),
+            'collations' => Inertia::defer(fn (): array => array_map(
+                fn (CollationInfo $collation): array => $collation->toArray(),
+                $this->adapter->schema()->collations(),
+            )),
         ]);
     }
 
