@@ -1,5 +1,7 @@
 # DBNova
 
+[![CI](https://github.com/vivek-mistry/dbnova/actions/workflows/ci.yml/badge.svg)](https://github.com/vivek-mistry/dbnova/actions/workflows/ci.yml)
+
 A self-hosted MySQL manager: a faster, more trustworthy alternative to phpMyAdmin.
 
 DBNova manages **one MySQL server** running on the same machine or VPS. You sign in with a MySQL account, and that account's grants decide what you can do. It's built for everyday browsing and for importing and exporting production-sized databases (10 GB and more) without running out of memory.
