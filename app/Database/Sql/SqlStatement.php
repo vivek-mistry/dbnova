@@ -28,6 +28,8 @@ final readonly class SqlStatement
         public string $delimiter = ';',
         ?int $firstLine = null,
         public bool $hasClientCommand = false,
+        public bool $endsWithLineBreak = false,
+        public bool $endsWithSpace = false,
     ) {
         $this->firstLine = $firstLine ?? $line;
     }

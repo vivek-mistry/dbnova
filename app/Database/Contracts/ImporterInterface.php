@@ -2,7 +2,11 @@
 
 namespace App\Database\Contracts;
 
+use App\Database\DTOs\Import\ImportRequest;
+use App\Database\DTOs\Import\ImportResult;
 use App\Database\DTOs\Import\PreflightReport;
+use App\Database\Exceptions\DatabaseOperationException;
+use App\Database\Exceptions\ReadOnlyModeException;
 use App\Database\Import\SourceStream;
 
 /**
@@ -20,4 +24,22 @@ interface ImporterInterface
      *                                                                             it may throw to stop the scan.
      */
     public function preflight(SourceStream $source, ?callable $onProgress = null): PreflightReport;
+
+    /**
+     * Stream the dump into the target database through the mysql client.
+     * Statements are sent as written, except the source database's
+     * USE / CREATE / DROP / ALTER DATABASE, which are skipped. Nothing is
+     * rolled back on failure: a failed import is partial.
+     *
+     * @param  callable(int $sourcePosition, int $bytesSent, int $statementsSent): void  $onProgress  Called
+     *                                                                                                about every
+     *                                                                                                millisecond; it
+     *                                                                                                may throw to
+     *                                                                                                stop (the client
+     *                                                                                                is terminated).
+     *
+     * @throws DatabaseOperationException when the server or target is not ready
+     * @throws ReadOnlyModeException
+     */
+    public function import(ImportRequest $request, SourceStream $source, callable $onProgress): ImportResult;
 }

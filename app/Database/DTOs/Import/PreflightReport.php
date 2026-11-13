@@ -28,6 +28,7 @@ final readonly class PreflightReport
         public bool $disablesForeignKeyChecks,
         public int $largestStatementBytes,
         public int $sqlBytes,
+        public int $compoundProgramCount = 0,
     ) {}
 
     /**
@@ -44,7 +45,7 @@ final readonly class PreflightReport
     }
 
     /**
-     * @return array{accepted: bool, problems: list<string>, warnings: list<string>, databases: list<string>, sourceDatabase: string|null, statementCount: int, tables: list<string>, tableCount: int, skippedStatements: int, storedObjectCount: int, disablesForeignKeyChecks: bool, largestStatementBytes: int, sqlBytes: int}
+     * @return array{accepted: bool, problems: list<string>, warnings: list<string>, databases: list<string>, sourceDatabase: string|null, statementCount: int, tables: list<string>, tableCount: int, skippedStatements: int, storedObjectCount: int, disablesForeignKeyChecks: bool, largestStatementBytes: int, sqlBytes: int, compoundProgramCount: int}
      */
     public function toArray(): array
     {
@@ -62,6 +63,7 @@ final readonly class PreflightReport
             'disablesForeignKeyChecks' => $this->disablesForeignKeyChecks,
             'largestStatementBytes' => $this->largestStatementBytes,
             'sqlBytes' => $this->sqlBytes,
+            'compoundProgramCount' => $this->compoundProgramCount,
         ];
     }
 }

@@ -9,8 +9,9 @@ use App\Database\Sql\SqlStatement;
  * only the statement kinds that dump tools write (mysqldump, phpMyAdmin,
  * Adminer, ...) are allowed, and table names in them must not name another
  * database. Statements where this scanner and the mysql client could split
- * the text differently are refused too, so what preflight inspected is
- * exactly what MySQL runs.
+ * the text differently are refused too, and so is a ";" inside a statement
+ * under another delimiter (MySQL would run several statements), except in
+ * routine/trigger/event bodies, which need the user's explicit trust.
  *
  * This is a best-effort guard for the "one database" rule. The real
  * boundary is the MySQL account's grants; routine and trigger bodies are
@@ -29,8 +30,10 @@ final class MySQLDumpPolicy
 
     /**
      * Why the statement cannot be imported, or null when it can.
+     *
+     * @param  bool  $trustCompoundPrograms  The user confirmed they trust the dump's multi-statement routine, trigger and event bodies.
      */
-    public static function violation(SqlStatement $statement): ?string
+    public static function violation(SqlStatement $statement, bool $trustCompoundPrograms = false): ?string
     {
         $keyword = $statement->keyword();
 
@@ -47,7 +50,7 @@ final class MySQLDumpPolicy
             ),
         };
 
-        return $problem ?? self::clientDisagreement($statement);
+        return $problem ?? self::clientDisagreement($statement) ?? self::innerSemicolonProblem($statement, $trustCompoundPrograms);
     }
 
     private static function checkSet(SqlStatement $statement): ?string
@@ -179,5 +182,54 @@ final class MySQLDumpPolicy
         }
 
         return null;
+    }
+
+    /**
+     * Whether the statement sends ";" to MySQL inside one client statement
+     * (possible only when the delimiter is not ";"). The mysql client always
+     * allows multiple statements per call, so MySQL runs each part.
+     */
+    private static function hasInnerSemicolon(SqlStatement $statement): bool
+    {
+        return $statement->delimiter !== ';' && str_contains($statement->sql, ';') && str_contains($statement->code(), ';');
+    }
+
+    /**
+     * A CREATE PROCEDURE / FUNCTION / TRIGGER / EVENT whose body has several
+     * statements. Its body (and anything MySQL reads after the body's END)
+     * cannot be checked here, so importing it needs the user's explicit trust.
+     */
+    public static function isCompoundProgram(SqlStatement $statement): bool
+    {
+        if ($statement->keyword() !== 'CREATE' || ! self::hasInnerSemicolon($statement)) {
+            return false;
+        }
+
+        foreach ($statement->leadingTokens(32) as $token) {
+            if ($token['type'] === 'word' && in_array(strtoupper($token['value']), ['PROCEDURE', 'FUNCTION', 'TRIGGER', 'EVENT'], true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * A ";" inside any other statement would make MySQL run a second,
+     * unchecked statement, so it is refused.
+     */
+    private static function innerSemicolonProblem(SqlStatement $statement, bool $trustCompoundPrograms): ?string
+    {
+        if (! self::hasInnerSemicolon($statement)) {
+            return null;
+        }
+
+        if (! self::isCompoundProgram($statement)) {
+            return sprintf('The statement contains ";" while the delimiter is "%s", so MySQL would run it as several statements that DBNova cannot check.', $statement->delimiter);
+        }
+
+        return $trustCompoundPrograms
+            ? null
+            : 'It creates a routine, trigger or event with a multi-statement body, which DBNova cannot check. Confirm that you trust this dump to import it.';
     }
 }

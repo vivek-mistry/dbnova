@@ -4,8 +4,10 @@ import { FileUp, Pause, Play, X } from '@lucide/vue';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import ImportStatusCard from '@/components/import/ImportStatusCard.vue';
+import ResetImportTargetDialog from '@/components/import/ResetImportTargetDialog.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useChunkedUpload } from '@/composables/useChunkedUpload';
 import { formatBytes } from '@/lib/format';
@@ -14,6 +16,7 @@ import { index } from '@/routes/import-export';
 import {
     cancel as cancelRoute,
     show as showRoute,
+    start as startRoute,
     store as storeRoute,
 } from '@/routes/imports';
 import type { ImportJobStatus, ImportStatus } from '@/types';
@@ -44,6 +47,13 @@ const history = ref<ImportJobStatus[]>(props.imports);
 const createHttp = useHttp<Record<string, never>, ImportJobStatus>();
 const pollHttp = useHttp<Record<string, never>, ImportJobStatus>();
 const cancelHttp = useHttp<Record<string, never>, ImportJobStatus>();
+const startHttp = useHttp<Record<string, never>, ImportJobStatus>();
+const speedMode = ref(false);
+const trustCompound = ref(false);
+const needsTrust = computed(
+    () => (job.value?.preflight?.compoundProgramCount ?? 0) > 0,
+);
+const resetOpen = ref(false);
 
 const uploading = computed(() => upload.state.phase === 'uploading');
 const busy = computed(
@@ -166,6 +176,32 @@ async function cancelJob(): Promise<void> {
             httpErrorMessage(error, 'The import could not be cancelled.'),
         );
     }
+}
+
+async function startImport(): Promise<void> {
+    if (job.value === null) {
+        return;
+    }
+
+    startHttp.transform(() => ({
+        speedMode: speedMode.value,
+        trustCompound: trustCompound.value,
+    }));
+
+    try {
+        job.value = await startHttp.post(startRoute.url(job.value.id));
+        remember(job.value);
+    } catch (error) {
+        toast.error(
+            httpErrorMessage(error, 'The import could not be started.'),
+        );
+    }
+}
+
+function onReset(updated: ImportJobStatus): void {
+    job.value = updated;
+    remember(updated);
+    toast.success(`"${updated.database}" was dropped and created again.`);
 }
 
 async function open(item: ImportJobStatus): Promise<void> {
@@ -361,17 +397,75 @@ const selectClass =
                 :cancelling="cancelHttp.processing"
                 @cancel="cancelJob"
                 @dismiss="job = null"
+                @reset="resetOpen = true"
             >
                 <template #actions>
-                    <div class="flex items-center gap-3">
-                        <Button disabled>Start import</Button>
-                        <span class="text-xs text-muted-foreground">
-                            Running the import arrives in the next update (Phase
-                            6b).
-                        </span>
+                    <div class="flex flex-col gap-3 border-t pt-4">
+                        <label class="flex items-start gap-2 text-sm">
+                            <Checkbox
+                                v-model="speedMode"
+                                class="mt-0.5"
+                                data-test="import-speed-mode"
+                            />
+                            <span>
+                                <span class="font-medium">Faster import</span>
+                                <span
+                                    class="block text-xs text-muted-foreground"
+                                >
+                                    Turns off foreign key and unique checks and
+                                    autocommit for this import's session, and
+                                    commits at the end. Data that breaks those
+                                    rules is not detected, and the import is
+                                    still not atomic: a failure leaves what was
+                                    sent.
+                                </span>
+                            </span>
+                        </label>
+                        <label
+                            v-if="needsTrust"
+                            class="flex items-start gap-2 text-sm"
+                        >
+                            <Checkbox
+                                v-model="trustCompound"
+                                class="mt-0.5"
+                                data-test="import-trust"
+                            />
+                            <span>
+                                <span class="font-medium">
+                                    I trust where this dump came from
+                                </span>
+                                <span
+                                    class="block text-xs text-muted-foreground"
+                                >
+                                    It creates
+                                    {{ job.preflight?.compoundProgramCount }}
+                                    routine(s), trigger(s) or event(s) whose
+                                    bodies DBNova cannot check. They can run any
+                                    SQL your MySQL account is allowed to, in any
+                                    database.
+                                </span>
+                            </span>
+                        </label>
+                        <div>
+                            <Button
+                                :disabled="
+                                    startHttp.processing ||
+                                    (needsTrust && !trustCompound)
+                                "
+                                data-test="import-run"
+                                @click="startImport"
+                            >
+                                <Play /> Start import
+                            </Button>
+                        </div>
                     </div>
                 </template>
             </ImportStatusCard>
+            <ResetImportTargetDialog
+                v-model:open="resetOpen"
+                :job="job"
+                @done="onReset"
+            />
         </div>
 
         <div class="max-w-3xl">

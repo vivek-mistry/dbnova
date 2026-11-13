@@ -94,6 +94,9 @@ return [
 
     'queue_heartbeat_stale_seconds' => (int) env('DBNOVA_QUEUE_HEARTBEAT_STALE_SECONDS', 180),
 
+    // A running import writes a heartbeat every 2 s; after this long without one it is marked interrupted.
+    'import_heartbeat_stale_seconds' => (int) env('DBNOVA_IMPORT_HEARTBEAT_STALE_SECONDS', 120),
+
     /*
     |--------------------------------------------------------------------------
     | Read-only Mode

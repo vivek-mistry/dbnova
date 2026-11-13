@@ -70,7 +70,12 @@ stopwaitsecs=60
 user=www-data
 ```
 
-Set `retry_after` for the `database` queue connection in `config/queue.php` higher than the longest expected import (for example 86400) so a running import is never picked up twice.
+- `retry_after` for the `database` connection defaults to 90000 s (25 h, `DB_QUEUE_RETRY_AFTER`), above the import jobs' 24 h timeout, so a running import is never picked up twice. Don't lower it.
+- Give the worker a long stop grace period (supervisor `stopwaitsecs`, systemd `TimeoutStopSec`), and use `php artisan queue:restart` for deploys. A worker killed mid-import leaves its `mysql` client running until the current statement and pipe buffer are done; the import is then marked `interrupted`.
+- The worker needs `pcntl` and `posix` (job timeouts, stopping the `mysql` client on cancel), and `DBNOVA_MYSQL_BIN` must point at a real `mysql` client binary.
+- One worker runs imports one at a time; a second import waits as "queued". While an import runs, the health page counts the import's own heartbeat as "worker alive".
+- The scheduler must run (`schedule:run` every minute): `dbnova:recover-jobs` marks imports whose worker died as `interrupted` within about 2 minutes, and `dbnova:prune-temp` deletes expired uploads hourly (`DBNOVA_FAILED_IMPORT_HOURS`, `DBNOVA_INCOMPLETE_UPLOAD_HOURS`).
+- For untrusted dumps, sign in with a MySQL account that only has rights on the target database: DBNova's one-database check is a best-effort guard, grants are the real boundary (SECURITY.md).
 
 ## Upgrading
 

@@ -191,6 +191,14 @@ class MySQLSchemaManager implements SchemaManagerInterface
         $this->connection->statement('DROP DATABASE '.$this->quoter->quote($name));
     }
 
+    public function busySessionCount(string $database): int
+    {
+        return (int) $this->connection->scalar(
+            "SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE DB = ? AND COMMAND NOT IN ('Sleep', 'Daemon') AND ID <> CONNECTION_ID()",
+            [$database],
+        );
+    }
+
     /**
      * @return list<array<string, mixed>>
      */

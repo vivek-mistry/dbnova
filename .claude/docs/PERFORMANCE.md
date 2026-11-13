@@ -34,19 +34,21 @@
 
 ## Benchmarks (filled in during Phases 3, 6, 7, 9)
 
-| Scenario                                                        | Target         | Measured                                                        | Hardware              | Date       |
-| --------------------------------------------------------------- | -------------- | --------------------------------------------------------------- | --------------------- | ---------- |
-| Browse 10M rows, page 1                                         | ≤ 200 ms       | pending (needs `dbnova_test` user → `dbnova:stress:seed-table`) | —                     | —          |
-| Browse 1.2M rows (`ecommerce.product_images`), page 1, 100 rows | ≤ 200 ms       | 9.7 ms query                                                    | dev Mac, MySQL 8.0.39 | 2026-10-30 |
-| Same table, page 51 (keyset)                                    | ≤ 200 ms       | 0.2 ms query                                                    | dev Mac               | 2026-10-30 |
-| Same table, 1,000-row page as JSON                              | —              | 1.8 ms query, 192 KB JSON, 46.5 MB peak PHP memory              | dev Mac               | 2026-10-30 |
-| Same table sorted by a non-key column, OFFSET 100,000           | known slow     | 1,403 ms (offset fallback)                                      | dev Mac               | 2026-10-30 |
-| Browse 10M rows, page 50,000 (keyset)                           | ≤ 200 ms       | —                                                               | —                     | —          |
-| Scanner split, real `mysqldump` (353 MB, 1M rows)               | —              | 103 MB/s, 9.5 MB peak (Phase 5 version: 16 MB/s)                | dev Mac               | 2026-11-13 |
-| Preflight 353 MB `.sql` / same as 25 MB `.sql.gz`               | memory ≤ 64 MB | 4.6 s (77 MB/s) / 3.7 s (95 MB/s), +5 MB peak                   | dev Mac               | 2026-11-13 |
-| Import 10 GB `.sql`                                             | memory ≤ 64 MB | —                                                               | —                     | —          |
-| Import 10 GB `.sql.gz`                                          | memory ≤ 64 MB | —                                                               | —                     | —          |
-| Export 5 GB DB `.sql.gz`                                        | memory ≤ 64 MB | —                                                               | —                     | —          |
+| Scenario                                                        | Target         | Measured                                                                        | Hardware              | Date       |
+| --------------------------------------------------------------- | -------------- | ------------------------------------------------------------------------------- | --------------------- | ---------- |
+| Browse 10M rows, page 1                                         | ≤ 200 ms       | pending (needs `dbnova_test` user → `dbnova:stress:seed-table`)                 | —                     | —          |
+| Browse 1.2M rows (`ecommerce.product_images`), page 1, 100 rows | ≤ 200 ms       | 9.7 ms query                                                                    | dev Mac, MySQL 8.0.39 | 2026-10-30 |
+| Same table, page 51 (keyset)                                    | ≤ 200 ms       | 0.2 ms query                                                                    | dev Mac               | 2026-10-30 |
+| Same table, 1,000-row page as JSON                              | —              | 1.8 ms query, 192 KB JSON, 46.5 MB peak PHP memory                              | dev Mac               | 2026-10-30 |
+| Same table sorted by a non-key column, OFFSET 100,000           | known slow     | 1,403 ms (offset fallback)                                                      | dev Mac               | 2026-10-30 |
+| Browse 10M rows, page 50,000 (keyset)                           | ≤ 200 ms       | —                                                                               | —                     | —          |
+| Scanner split, real `mysqldump` (353 MB, 1M rows)               | —              | 103 MB/s, 9.5 MB peak (Phase 5 version: 16 MB/s)                                | dev Mac               | 2026-11-13 |
+| Preflight 353 MB `.sql` / same as 25 MB `.sql.gz`               | memory ≤ 64 MB | 4.6 s (77 MB/s) / 3.7 s (95 MB/s), +5 MB peak                                   | dev Mac               | 2026-11-13 |
+| Preflight 2 GB synthetic dump (20.1M rows, 4 short strings/row) | memory ≤ 64 MB | 37.3 s (55 MB/s), +4.3 MB peak                                                  | dev Mac               | 2026-11-13 |
+| **Import 2 GB `.sql`** (20.1M rows, 4,038 INSERTs of ~0.5 MB)   | memory ≤ 64 MB | **117 s (17.6 MB/s, MySQL-bound), +6 MB peak, 30 MB process**; row counts exact | dev Mac, MySQL 8.0.39 | 2026-11-13 |
+| Import 10 GB `.sql` (extrapolated from 2 GB; user chose 2 GB)   | memory ≤ 64 MB | ≈ 3 min preflight + ≈ 10 min import, memory flat                                | dev Mac               | 2026-11-13 |
+| Import 10 GB `.sql.gz`                                          | memory ≤ 64 MB | —                                                                               | —                     | —          |
+| Export 5 GB DB `.sql.gz`                                        | memory ≤ 64 MB | —                                                                               | —                     | —          |
 
 ### Notes from Phase 3a
 

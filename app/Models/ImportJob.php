@@ -113,6 +113,7 @@ class ImportJob extends Model
             'lastError' => $this->last_error,
             'errorLine' => $this->error_line,
             'preflight' => $this->preflight,
+            'options' => $this->options ?? (object) [],
             'cancelRequested' => $this->cancel_requested,
             'startedAt' => $this->started_at?->toIso8601String(),
             'finishedAt' => $this->finished_at?->toIso8601String(),

@@ -10,7 +10,7 @@ Status values: `not started` · `in progress` · `review` · `done`. Only **one*
 | 3   | Table browser & data grid                 | done        | [phase-03-table-browser.md](phase-03-table-browser.md)       |
 | 4   | Schema management                         | done        | [phase-04-schema.md](phase-04-schema.md)                     |
 | 5   | SQL editor                                | done        | [phase-05-sql-editor.md](phase-05-sql-editor.md)             |
-| 6   | Large import engine                       | in progress | [phase-06-import.md](phase-06-import.md)                     |
+| 6   | Large import engine                       | done        | [phase-06-import.md](phase-06-import.md)                     |
 | 7   | Export engine                             | not started | [phase-07-export.md](phase-07-export.md)                     |
 | 8   | Monitoring & advanced operations          | not started | [phase-08-monitoring.md](phase-08-monitoring.md)             |
 | 9   | Hardening & stress testing                | not started | [phase-09-hardening.md](phase-09-hardening.md)               |

@@ -38,6 +38,7 @@ export type PreflightReport = {
     disablesForeignKeyChecks: boolean;
     largestStatementBytes: number;
     sqlBytes: number;
+    compoundProgramCount?: number;
 };
 
 export type ImportJobStatus = {
@@ -53,6 +54,13 @@ export type ImportJobStatus = {
     lastError: string | null;
     errorLine: number | null;
     preflight: PreflightReport | null;
+    options: {
+        speedMode?: boolean;
+        skippedStatements?: number;
+        warningCount?: number;
+        warnings?: string[];
+        targetReset?: boolean;
+    };
     cancelRequested: boolean;
     startedAt: string | null;
     finishedAt: string | null;

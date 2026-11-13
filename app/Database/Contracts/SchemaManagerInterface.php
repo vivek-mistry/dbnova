@@ -79,4 +79,13 @@ interface SchemaManagerInterface
      * @throws DatabaseOperationException
      */
     public function dropDatabase(string $name): void;
+
+    /**
+     * How many other sessions are running a statement in the database
+     * (visible to the signed-in account), e.g. an import's client that
+     * outlived its worker.
+     *
+     * @throws DatabaseOperationException
+     */
+    public function busySessionCount(string $database): int;
 }

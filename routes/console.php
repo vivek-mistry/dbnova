@@ -10,3 +10,5 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::job(new RecordQueueHeartbeat)->everyMinute();
+Schedule::command('dbnova:recover-jobs')->everyMinute()->withoutOverlapping();
+Schedule::command('dbnova:prune-temp')->hourly()->withoutOverlapping();

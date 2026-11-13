@@ -21,7 +21,9 @@ Route::middleware(['auth', EnsureMySQLCredentials::class])->group(function () {
 
     Route::resource('databases', DatabaseController::class)
         ->only(['index', 'store', 'show', 'update', 'destroy'])
-        ->parameters(['databases' => 'database']);
+        ->parameters(['databases' => 'database'])
+        // Dropping re-checks the MySQL password: limit guessing.
+        ->middlewareFor('destroy', 'throttle:5,1');
 
     Route::post('databases/{database}/schema/preview', [SchemaChangeController::class, 'preview'])->name('schema.preview');
     Route::post('databases/{database}/schema/apply', [SchemaChangeController::class, 'apply'])->name('schema.apply');
@@ -49,6 +51,8 @@ Route::middleware(['auth', EnsureMySQLCredentials::class])->group(function () {
     Route::post('imports', [ImportController::class, 'store'])->name('imports.store');
     Route::get('imports/{import}', [ImportController::class, 'show'])->name('imports.show');
     Route::post('imports/{import}/cancel', [ImportController::class, 'cancel'])->name('imports.cancel');
+    Route::post('imports/{import}/start', [ImportController::class, 'start'])->name('imports.start');
+    Route::post('imports/{import}/reset-target', [ImportController::class, 'resetTarget'])->middleware('throttle:5,1')->name('imports.reset-target');
 
     Route::post('uploads', [UploadController::class, 'store'])->middleware('throttle:30,1')->name('uploads.store');
     Route::get('uploads/{upload}', [UploadController::class, 'show'])->name('uploads.show');

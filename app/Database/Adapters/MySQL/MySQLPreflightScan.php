@@ -27,6 +27,8 @@ final class MySQLPreflightScan
 
     private int $violationCount = 0;
 
+    private int $compoundProgramCount = 0;
+
     /** @var list<string> */
     private array $tables = [];
 
@@ -48,7 +50,12 @@ final class MySQLPreflightScan
         $size = strlen($statement->sql);
         $this->largestStatementBytes = max($this->largestStatementBytes, $size);
 
-        $violation = MySQLDumpPolicy::violation($statement);
+        // Compound routine bodies are counted below and need the user's trust when starting.
+        $violation = MySQLDumpPolicy::violation($statement, trustCompoundPrograms: true);
+
+        if (MySQLDumpPolicy::isCompoundProgram($statement)) {
+            $this->compoundProgramCount++;
+        }
 
         if ($violation !== null) {
             $this->violationCount++;
@@ -129,6 +136,13 @@ final class MySQLPreflightScan
             $warnings[] = 'The dump sets GTID_PURGED, which needs administrator privileges and usually fails. Re-export with --set-gtid-purged=OFF.';
         }
 
+        if ($this->compoundProgramCount > 0) {
+            $warnings[] = sprintf(
+                'The dump creates %d routine(s), trigger(s) or event(s) with multi-statement bodies. DBNova cannot check these: they can run any SQL your MySQL account is allowed to, in any database. Import only if you trust where the dump came from.',
+                $this->compoundProgramCount,
+            );
+        }
+
         $singleName = count($names) === 1 ? $names[0] : null;
 
         return new PreflightReport(
@@ -144,6 +158,7 @@ final class MySQLPreflightScan
             disablesForeignKeyChecks: $this->disablesForeignKeyChecks,
             largestStatementBytes: $this->largestStatementBytes,
             sqlBytes: $sqlBytes,
+            compoundProgramCount: $this->compoundProgramCount,
         );
     }
 }

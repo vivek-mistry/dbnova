@@ -14,7 +14,7 @@ beforeEach(function () {
         $path = $this->directory.'/dump.'.$format;
         file_put_contents($path, $format === 'gz' ? gzencode($sql) : $sql);
 
-        return (new MySQLImporter)->preflight(SourceStream::open($path, $format), $onProgress);
+        return app(MySQLImporter::class)->preflight(SourceStream::open($path, $format), $onProgress);
     };
 });
 
@@ -39,8 +39,10 @@ test('a dump made for one database is accepted and its database statements will 
     expect($report->tableCount)->toBe(2);
     expect($report->storedObjectCount)->toBe(1);
     expect($report->disablesForeignKeyChecks)->toBeTrue();
-    expect($report->warnings)->toHaveCount(1);
+    expect($report->compoundProgramCount)->toBe(1);
+    expect($report->warnings)->toHaveCount(2);
     expect($report->warnings[0])->toContain('DEFINER');
+    expect($report->warnings[1])->toContain('multi-statement bodies');
     expect($report->sqlBytes)->toBe(strlen(dumpFixture('single-db.sql')));
 });
 
@@ -110,6 +112,10 @@ test('statements that could act outside the target database or that the client r
     'delimiter command mid-statement' => ["INSERT INTO t VALUES (1)\ndelimiter $$\n;", 'DELIMITER command appears'],
     'multibyte charset' => ['SET NAMES gbk;', 'multibyte character set'],
     'no backslash escapes' => ["SET SESSION sql_mode = 'NO_BACKSLASH_ESCAPES';", 'NO_BACKSLASH_ESCAPES'],
+    'second statement behind ";" under another delimiter' => ["DELIMITER ;;\nSET @a = 1; CREATE TABLE other.pwn1 (i int);;\nDELIMITER ;", 'contains ";" while the delimiter is ";;"'],
+    'second statement in a view under another delimiter' => ["DELIMITER $$\nCREATE VIEW v AS SELECT 1; DROP TABLE t$$\nDELIMITER ;", 'contains ";" while the delimiter is "$$"'],
+    'quoted delimiter' => ["DELIMITER 'x'\nSET @v = 1 x", "DELIMITER 'x' is not supported"],
+    'delimiter with a backslash' => ["DELIMITER a\\b\nSET @v = 1 a\\b", 'is not supported'],
 ]);
 
 test('what mysqldump, phpMyAdmin and Adminer write is accepted', function () {
@@ -145,6 +151,8 @@ test('what mysqldump, phpMyAdmin and Adminer write is accepted', function () {
 
     expect($report->problems)->toBe([]);
     expect($report->storedObjectCount)->toBe(2);
+    expect($report->compoundProgramCount)->toBe(1);
+    expect(implode("\n", $report->warnings))->toContain('1 routine(s), trigger(s) or event(s) with multi-statement bodies');
 });
 
 test('a gzip dump gives the same report as the plain file', function () {

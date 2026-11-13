@@ -143,6 +143,8 @@ class UploadStore
         }
 
         touch($upload->chunkDirectory().'/'.$index);
+        // Activity keeps a slow upload from being pruned as abandoned.
+        $upload->touch();
 
         if (count($this->receivedChunks($upload)) === $upload->total_chunks) {
             Upload::query()->whereKey($upload->id)->where('status', UploadStatus::Uploading)

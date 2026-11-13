@@ -100,7 +100,7 @@ function fakeDatabaseAdapter(): array
         ->shouldReceive('tables')->andReturn($tables)
         ->shouldReceive('queries')->andReturn($queries)
         // Preflight only reads files, so the real importer is safe to use.
-        ->shouldReceive('importer')->andReturn(new MySQLImporter));
+        ->shouldReceive('importer')->andReturn(app(MySQLImporter::class)));
 
     return ['schema' => $schema, 'browser' => $browser, 'records' => $records, 'tables' => $tables, 'queries' => $queries];
 }

@@ -3,6 +3,7 @@
 namespace App\Database\Sql;
 
 use App\Database\Exceptions\SqlStatementTooLargeException;
+use App\Database\Exceptions\UnsupportedDelimiterException;
 
 /**
  * Splits MySQL text into statements the way the mysql client does: a
@@ -221,7 +222,7 @@ class SqlStreamScanner
                 }
 
                 if ($buffer[$position] === 'D' || $buffer[$position] === 'd') {
-                    $directiveEnd = $this->delimiterDirectiveEnd($buffer, $position, $length, $final);
+                    $directiveEnd = $this->delimiterDirectiveEnd($buffer, $position, $length, $final, $counted);
 
                     if ($directiveEnd === 0) {
                         break; // Need more input to tell.
@@ -348,7 +349,7 @@ class SqlStreamScanner
      * The offset just after a DELIMITER directive line starting here, 0 when
      * more input is needed to tell, or null when this is not a directive.
      */
-    private function delimiterDirectiveEnd(string $buffer, int $position, int $length, bool $final): ?int
+    private function delimiterDirectiveEnd(string $buffer, int $position, int $length, bool $final, int $counted): ?int
     {
         $start = substr($buffer, $position, 10);
 
@@ -371,6 +372,15 @@ class SqlStreamScanner
         $newDelimiter = preg_split('/\s+/', $directive)[0] ?? '';
 
         if ($newDelimiter !== '') {
+            // The mysql client strips quotes from the argument and refuses backslashes, so
+            // such delimiters would split differently from this scanner: refuse them.
+            if (preg_match('/^[^\s\'"`\\\\]{1,16}$/', $newDelimiter) !== 1) {
+                throw new UnsupportedDelimiterException(
+                    $this->line + substr_count($buffer, "\n", $counted, $position - $counted),
+                    $newDelimiter,
+                );
+            }
+
             $this->delimiter = $newDelimiter;
         }
 
@@ -386,7 +396,26 @@ class SqlStreamScanner
             $leadingWhitespace = strspn($this->sql, " \t\r\n");
             $commentLines = substr_count($this->sql, "\n", $leadingWhitespace, max(0, $this->codeOffset - $leadingWhitespace));
 
-            $statement = new SqlStatement(trim($this->sql), $this->statementLine, $this->delimiter, $this->statementLine - $commentLines, $this->backslashInCode);
+            // A line comment always runs to a newline, so text ending in a line break may end in a comment.
+            $end = strlen($this->sql) - 1;
+
+            while ($end >= 0 && ($this->sql[$end] === ' ' || $this->sql[$end] === "\t" || $this->sql[$end] === "\r")) {
+                $end--;
+            }
+
+            $endsWithLineBreak = $end >= 0 && $this->sql[$end] === "\n";
+
+            $statement = new SqlStatement(
+                trim($this->sql),
+                $this->statementLine,
+                $this->delimiter,
+                $this->statementLine - $commentLines,
+                $this->backslashInCode,
+                $endsWithLineBreak,
+                // Whitespace before the delimiter matters: removing it can let a
+                // multi-character delimiter match earlier ("1 $" + "$$" → "1 $$$").
+                ! $endsWithLineBreak && $end < strlen($this->sql) - 1,
+            );
         }
 
         $this->sql = '';
