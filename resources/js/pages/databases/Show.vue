@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { Head, Link, setLayoutProps, usePage } from '@inertiajs/vue3';
-import { Eye, Table2 } from '@lucide/vue';
+import { Eye, SquareTerminal, Table2 } from '@lucide/vue';
 import DropDatabaseDialog from '@/components/database/DropDatabaseDialog.vue';
 import CreateTableDialog from '@/components/schema/CreateTableDialog.vue';
 import RenameDatabaseDialog from '@/components/database/RenameDatabaseDialog.vue';
 import Heading from '@/components/Heading.vue';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { formatBytes, formatNumber } from '@/lib/format';
 import { index, show } from '@/routes/databases';
+import { index as sqlIndex } from '@/routes/sql';
 import { show as tableShow } from '@/routes/tables';
 import type { CollationInfo, DatabaseInfo, TableInfo } from '@/types';
 
@@ -40,6 +42,16 @@ const page = usePage();
                 :title="database.name"
                 :description="`${formatNumber(database.tableCount)} tables · ${formatBytes(database.sizeBytes)} · ${database.collation}`"
             />
+            <div class="flex gap-2">
+                <Button variant="outline" size="sm" as-child>
+                    <Link
+                        :href="sqlIndex({ query: { database: database.name } })"
+                    >
+                        <SquareTerminal />
+                        SQL
+                    </Link>
+                </Button>
+            </div>
             <div v-if="!database.isSystem" class="flex gap-2">
                 <CreateTableDialog
                     :database="database.name"

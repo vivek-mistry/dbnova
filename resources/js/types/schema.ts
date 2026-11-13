@@ -1,3 +1,5 @@
+import type { Cell } from './table';
+
 export type ColumnDefaultKind = 'none' | 'null' | 'value' | 'current_timestamp';
 
 /** A column as edited in the schema forms. */
@@ -53,4 +55,46 @@ export type ApplyResult = {
     message: string;
     algorithm: 'INSTANT' | 'INPLACE' | 'COPY' | null;
     redirect: string | null;
+};
+
+export type StatementResult = {
+    line: number;
+    sql: string;
+    keyword: string;
+    status: 'ok' | 'error' | 'skipped';
+    columns: string[] | null;
+    rows: Cell[][] | null;
+    rowsTruncated: boolean;
+    affectedRows: number | null;
+    lastInsertId: string | null;
+    warnings: { level: string; code: number; message: string }[];
+    error: string | null;
+    errorCode: number | null;
+    durationMs: number;
+};
+
+export type QueryHistoryItem = {
+    id: number;
+    database: string | null;
+    sql: string;
+    statementCount: number;
+    status: 'ok' | 'error';
+    error: string | null;
+    durationMs: number;
+    name: string | null;
+    saved: boolean;
+    createdAt: string;
+};
+
+export type QueryRunResponse = {
+    statements: StatementResult[];
+    succeeded: boolean;
+    durationMs: number;
+    history: QueryHistoryItem;
+};
+
+export type DestructiveStatement = {
+    line: number;
+    keyword: string;
+    sql: string;
 };

@@ -12,6 +12,7 @@ import {
     show as tableShow,
     structure as tableStructure,
 } from '@/routes/tables';
+import { index as sqlIndex } from '@/routes/sql';
 import type { TableInfo } from '@/types';
 
 const props = defineProps<{
@@ -34,6 +35,12 @@ const { isCurrentUrl } = useCurrentUrl();
 const tabs = [
     { title: 'Browse', href: tableShow(routeArgs) },
     { title: 'Structure', href: tableStructure(routeArgs) },
+    {
+        title: 'SQL',
+        href: sqlIndex({
+            query: { database: props.database, table: props.table.name },
+        }),
+    },
 ];
 </script>
 

@@ -9,7 +9,7 @@ Status values: `not started` · `in progress` · `review` · `done`. Only **one*
 | 2   | Adapter layer & database explorer         | done        | [phase-02-adapter-explorer.md](phase-02-adapter-explorer.md) |
 | 3   | Table browser & data grid                 | done        | [phase-03-table-browser.md](phase-03-table-browser.md)       |
 | 4   | Schema management                         | done        | [phase-04-schema.md](phase-04-schema.md)                     |
-| 5   | SQL editor                                | not started | [phase-05-sql-editor.md](phase-05-sql-editor.md)             |
+| 5   | SQL editor                                | done        | [phase-05-sql-editor.md](phase-05-sql-editor.md)             |
 | 6   | Large import engine                       | not started | [phase-06-import.md](phase-06-import.md)                     |
 | 7   | Export engine                             | not started | [phase-07-export.md](phase-07-export.md)                     |
 | 8   | Monitoring & advanced operations          | not started | [phase-08-monitoring.md](phase-08-monitoring.md)             |
@@ -18,12 +18,12 @@ Status values: `not started` · `in progress` · `review` · `done`. Only **one*
 
 ## Dependencies needing approval (by phase)
 
-| Phase | Package                                                                                    | Purpose                             |
-| ----- | ------------------------------------------------------------------------------------------ | ----------------------------------- |
-| 3 ✅  | `@tanstack/vue-table@^9.3.1`, `@tanstack/vue-virtual@^3.13.50` (approved, installed)       | Data grid + virtualization          |
-| 5     | `codemirror`, `@codemirror/lang-sql` (+ `@codemirror/view`, `@codemirror/state` if needed) | SQL editor                          |
-| 8     | `apexcharts`, `vue3-apexcharts`                                                            | Dashboard charts                    |
-| —     | `predis/predis` (optional)                                                                 | Only if Redis queue is chosen later |
+| Phase | Package                                                                              | Purpose                             |
+| ----- | ------------------------------------------------------------------------------------ | ----------------------------------- |
+| 3 ✅  | `@tanstack/vue-table@^9.3.1`, `@tanstack/vue-virtual@^3.13.50` (approved, installed) | Data grid + virtualization          |
+| 5 ✅  | `codemirror@^6.0.2`, `@codemirror/lang-sql@^6.10.0` (approved, installed)            | SQL editor                          |
+| 8     | `apexcharts`, `vue3-apexcharts`                                                      | Dashboard charts                    |
+| —     | `predis/predis` (optional)                                                           | Only if Redis queue is chosen later |
 
 ## Workflow
 

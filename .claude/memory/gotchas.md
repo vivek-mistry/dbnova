@@ -26,4 +26,8 @@ Append entries during and at the end of each phase. Use the format `Phase N — 
 - Phase 4 — `useHttp<TForm>` requires form data built from FormDataConvertible values. Nested arbitrary JSON (`Record<string, unknown>`, or a recursive JSON type) fails or hits "type instantiation is excessively deep". — Use `useHttp<Record<string, never>, TResponse>()` + `http.transform(() => body)` for nested JSON bodies (see `useSchemaChange`).
 - Phase 4 — `CHANGE COLUMN` rewrites the whole definition. Anything left out (collation, comment, default) is reset. — Edit forms are built from the full `ColumnInfo` (which carries the collation), and the dialog warns about this.
 - Phase 4 — MySQL rejects an unsupported `ALGORITHM`/`LOCK` (errors 1845/1846) before doing any work, so trying INSTANT → INPLACE → COPY in sequence is safe. Pre-8.0.12 servers answer `ALGORITHM=INSTANT` with a syntax error (1064), which is treated as unsupported only on the INSTANT step.
+- Phase 5 — Unbuffered PDO results drain the whole result set on `closeCursor()`. — To stop at a row cap, `KILL QUERY` the connection from a second connection, close the cursor, then run `DO 0` to absorb a kill that lands after the query finished.
+- Phase 5 — The user's SQL must go through the text protocol (emulated prepares). Server-side prepare rejects some statements, and `?` would become a placeholder.
+- Phase 5 — InnoDB reserves auto-increment ids in batches for `INSERT … SELECT`. — Never hard-code the next id in tests.
+- Phase 5 — `SLEEP()` interrupted by `KILL QUERY` returns 1 instead of an error. Real queries fail with 1317.
 - Phase 0 — `mysql` on PATH is a shell alias. — Always resolve binaries from config, never from `PATH` lookups that rely on the interactive shell.

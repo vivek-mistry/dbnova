@@ -38,6 +38,15 @@ interface SchemaManagerInterface
     public function table(string $database, string $table): ?TableInfo;
 
     /**
+     * Column names per table (and view) of a database, for SQL autocomplete.
+     *
+     * @return array<string, list<string>>
+     *
+     * @throws DatabaseOperationException
+     */
+    public function columnsByTable(string $database): array;
+
+    /**
      * @return list<CollationInfo>
      *
      * @throws DatabaseOperationException

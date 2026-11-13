@@ -1,6 +1,7 @@
 <?php
 
 use App\Database\Contracts\DatabaseAdapterInterface;
+use App\Database\Contracts\QueryExecutorInterface;
 use App\Database\Contracts\RecordManagerInterface;
 use App\Database\Contracts\SchemaManagerInterface;
 use App\Database\Contracts\TableBrowserInterface;
@@ -76,9 +77,9 @@ function fakeSchemaManager(): MockInterface
 
 /**
  * Replace the managed-database adapter with one whose schema manager, table
- * browser, record manager and table manager are mocks.
+ * browser, record manager, table manager and query executor are mocks.
  *
- * @return array{schema: MockInterface, browser: MockInterface, records: MockInterface, tables: MockInterface}
+ * @return array{schema: MockInterface, browser: MockInterface, records: MockInterface, tables: MockInterface, queries: MockInterface}
  */
 function fakeDatabaseAdapter(): array
 {
@@ -86,6 +87,7 @@ function fakeDatabaseAdapter(): array
     $browser = Mockery::mock(TableBrowserInterface::class);
     $records = Mockery::mock(RecordManagerInterface::class);
     $tables = Mockery::mock(TableManagerInterface::class);
+    $queries = Mockery::mock(QueryExecutorInterface::class);
     $tables->shouldReceive('columnTypes')->andReturn(['int', 'varchar', 'text'])->byDefault();
     $tables->shouldReceive('engines')->andReturn(['InnoDB'])->byDefault();
     $tables->shouldReceive('foreignKeys')->andReturn([])->byDefault();
@@ -94,9 +96,10 @@ function fakeDatabaseAdapter(): array
         ->shouldReceive('schema')->andReturn($schema)
         ->shouldReceive('browser')->andReturn($browser)
         ->shouldReceive('records')->andReturn($records)
-        ->shouldReceive('tables')->andReturn($tables));
+        ->shouldReceive('tables')->andReturn($tables)
+        ->shouldReceive('queries')->andReturn($queries));
 
-    return ['schema' => $schema, 'browser' => $browser, 'records' => $records, 'tables' => $tables];
+    return ['schema' => $schema, 'browser' => $browser, 'records' => $records, 'tables' => $tables, 'queries' => $queries];
 }
 
 /**

@@ -30,3 +30,4 @@ Newest entries go at the bottom. Use the format `YYYY-MM-DD — Decision — Why
 - 2026-10-30 — Schema changes run online first (INSTANT → INPLACE, LOCK=NONE → COPY). A COPY on a table over `dbnova.limits.locking_ddl_confirm_rows` (1M) needs explicit confirmation (HTTP 409 → "Run anyway"). DDL runs in the request, not a queue. — The user chose it. — —
 - 2026-10-30 — Schema editing uses per-action dialogs (Structure tab) plus a Create-table form, every one through the shared preview → run dialog. — The user chose it. — —
 - 2026-10-30 — Drop column, truncate and drop table need the typed table name + MySQL password at apply time (not at preview). — Same pattern as drop database. — ADR 0008
+- 2026-11-13 — Approved and installed `codemirror@^6.0.2` + `@codemirror/lang-sql@^6.10.0`. The SQL editor stops at the first error (no wrapping transaction) and confirms destructive statements (DROP, TRUNCATE, UPDATE/DELETE without WHERE) before running. — The user chose it. — —

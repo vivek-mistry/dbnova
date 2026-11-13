@@ -2,7 +2,7 @@
 
 First checked on 2026-10-30, then confirmed with `SystemCheckService` in Phase 1.
 
-- **PHP CLI:** 8.3.36 with every required and worker extension (pdo_mysql, pdo_sqlite, zip, zlib, pcntl, posix…). AGENTS.md (Boost) says "PHP 8.5". Treat `^8.3` from composer.json as the real minimum.
+- **PHP CLI:** 8.4.27 via Laravel Herd (`~/Library/Application Support/Herd/bin/php`) since about 2026-11 (was 8.3.36 at project start). AGENTS.md (Boost) says "PHP 8.5"; CI runs 8.5. Treat `^8.3` from composer.json as the minimum.
 - **`mysql` shell alias is broken:** it points at `/Applications/MAMP/Library/bin/mysql`, which doesn't exist. Symfony Process can't see aliases anyway.
 - **Working client binaries:** `/usr/local/mysql/bin/mysql` and `/usr/local/mysql/bin/mysqldump`, both 8.0.39 (versions match). Set `DBNOVA_MYSQL_BIN` / `DBNOVA_MYSQLDUMP_BIN` to these in `.env`.
 - **MySQL server:** reachable on 127.0.0.1:3306 (MySQL 8.0.39). The user signs in to DBNova with their MySQL `root` account (the password is never stored in files or memory). The user's `.env` is off-limits to Claude (settings deny).

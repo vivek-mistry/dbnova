@@ -3,6 +3,7 @@
 namespace App\Database\Adapters\MySQL;
 
 use App\Database\Contracts\DatabaseAdapterInterface;
+use App\Database\Contracts\QueryExecutorInterface;
 use App\Database\Contracts\RecordManagerInterface;
 use App\Database\Contracts\SchemaManagerInterface;
 use App\Database\Contracts\ServerInspectorInterface;
@@ -17,6 +18,7 @@ class MySQLAdapter implements DatabaseAdapterInterface
         private MySQLTableBrowser $tableBrowser,
         private MySQLRecordManager $recordManager,
         private MySQLTableManager $tableManager,
+        private MySQLQueryExecutor $queryExecutor,
     ) {}
 
     public function engine(): string
@@ -47,5 +49,10 @@ class MySQLAdapter implements DatabaseAdapterInterface
     public function tables(): TableManagerInterface
     {
         return $this->tableManager;
+    }
+
+    public function queries(): QueryExecutorInterface
+    {
+        return $this->queryExecutor;
     }
 }

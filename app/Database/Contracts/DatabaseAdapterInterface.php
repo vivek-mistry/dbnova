@@ -22,4 +22,6 @@ interface DatabaseAdapterInterface
     public function records(): RecordManagerInterface;
 
     public function tables(): TableManagerInterface;
+
+    public function queries(): QueryExecutorInterface;
 }

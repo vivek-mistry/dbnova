@@ -3,6 +3,7 @@
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\DatabaseTreeController;
+use App\Http\Controllers\QueryController;
 use App\Http\Controllers\RecordController;
 use App\Http\Controllers\SchemaChangeController;
 use App\Http\Controllers\SystemController;
@@ -37,7 +38,11 @@ Route::middleware(['auth', EnsureMySQLCredentials::class])->group(function () {
     Route::get('database-tree', [DatabaseTreeController::class, 'index'])->name('database-tree.index');
     Route::get('database-tree/{database}', [DatabaseTreeController::class, 'tables'])->name('database-tree.tables');
 
-    Route::inertia('sql', 'ComingSoon', ['title' => 'SQL Editor', 'phase' => 5])->name('sql.index');
+    Route::get('sql', [QueryController::class, 'index'])->name('sql.index');
+    Route::post('sql/run', [QueryController::class, 'run'])->name('sql.run');
+    Route::post('sql/cancel', [QueryController::class, 'cancel'])->name('sql.cancel');
+    Route::get('sql/schema', [QueryController::class, 'schema'])->name('sql.schema');
+    Route::patch('sql/history/{history}', [QueryController::class, 'save'])->name('sql.history.save');
     Route::inertia('import-export', 'ComingSoon', ['title' => 'Import / Export', 'phase' => 6])->name('import-export.index');
     Route::inertia('processes', 'ComingSoon', ['title' => 'Processes', 'phase' => 8])->name('processes.index');
 

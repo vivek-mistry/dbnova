@@ -78,6 +78,25 @@ class MySQLSchemaManager implements SchemaManagerInterface
         );
     }
 
+    public function columnsByTable(string $database): array
+    {
+        $rows = $this->connection->select(
+            'SELECT TABLE_NAME, COLUMN_NAME FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = ?
+            ORDER BY TABLE_NAME, ORDINAL_POSITION
+            LIMIT 20000',
+            [$database],
+        );
+
+        $tables = [];
+
+        foreach ($rows as $row) {
+            $tables[(string) $row['TABLE_NAME']][] = (string) $row['COLUMN_NAME'];
+        }
+
+        return $tables;
+    }
+
     public function collations(): array
     {
         $rows = $this->connection->select(

@@ -14,6 +14,11 @@ use PDOException;
  */
 class MySQLConnection
 {
+    /**
+     * MySQL error: the thread to kill does not exist (the query already finished).
+     */
+    private const int UNKNOWN_THREAD = 1094;
+
     private ?PDO $pdo = null;
 
     /**
@@ -192,7 +197,56 @@ class MySQLConnection
             // Older servers and MariaDB do not have this variable and never cache.
         }
 
+        try {
+            // Stop runaway SELECTs (e.g. an unindexed sort on millions of rows).
+            $pdo->exec('SET SESSION max_execution_time = '.config()->integer('dbnova.limits.query_timeout_ms'));
+        } catch (PDOException) {
+            // MariaDB names this max_statement_time; DBNova does not set it there.
+        }
+
         return $pdo;
+    }
+
+    /**
+     * The MySQL thread id of this connection, used to cancel its running query.
+     *
+     * @throws DatabaseOperationException
+     */
+    public function connectionId(): int
+    {
+        return (int) $this->scalar('SELECT CONNECTION_ID()');
+    }
+
+    /**
+     * Stop the statement running on another connection of the same account.
+     * Returns false when that connection no longer exists.
+     *
+     * @throws DatabaseOperationException
+     */
+    public function killQuery(int $connectionId): bool
+    {
+        $credentials = $this->explicitCredentials ?? $this->credentials->get() ?? throw new NotSignedInException;
+
+        try {
+            // A separate connection: the target one is busy running the query.
+            $this->connector->connect($credentials['username'], $credentials['password'])->exec('KILL QUERY '.$connectionId);
+        } catch (PDOException $exception) {
+            if ((int) ($exception->errorInfo[1] ?? 0) === self::UNKNOWN_THREAD) {
+                return false;
+            }
+
+            throw DatabaseOperationException::fromPdoException($exception);
+        }
+
+        return true;
+    }
+
+    /**
+     * Stream the next result sets row by row instead of buffering them in PHP.
+     */
+    public function setUnbuffered(bool $unbuffered): void
+    {
+        $this->pdo()->setAttribute(self::mysqlAttribute('ATTR_USE_BUFFERED_QUERY'), ! $unbuffered);
     }
 
     /**
@@ -200,8 +254,13 @@ class MySQLConnection
      */
     private static function foundRowsAttribute(): int
     {
-        return defined('Pdo\Mysql::ATTR_FOUND_ROWS')
-            ? (int) constant('Pdo\Mysql::ATTR_FOUND_ROWS')
-            : PDO::MYSQL_ATTR_FOUND_ROWS;
+        return self::mysqlAttribute('ATTR_FOUND_ROWS');
+    }
+
+    private static function mysqlAttribute(string $name): int
+    {
+        return defined("Pdo\\Mysql::{$name}")
+            ? (int) constant("Pdo\\Mysql::{$name}")
+            : (int) constant("PDO::MYSQL_{$name}");
     }
 }
