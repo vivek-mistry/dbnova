@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Database\Contracts\DatabaseAdapterInterface;
 use App\Database\DTOs\DatabaseInfo;
 use App\Database\DTOs\TableInfo;
+use App\Database\Exceptions\DatabaseOperationException;
+use App\Database\Sql\SqlStreamScanner;
 use App\Enums\ExportFormat;
 use App\Enums\ExportStatus;
 use App\Jobs\ExportDatabaseJob;
@@ -15,13 +17,15 @@ use App\Services\Auth\MySQLCredentialStore;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
- * Database and table exports to .sql / .sql.gz (Phase 7a). The dump runs
+ * Database and table exports to .sql / .sql.gz (Phase 7a), and one table
+ * or a SQL editor result to .csv / .csv.gz (7b). The export runs
  * in a queued job; the file is downloaded through a short-lived signed
  * link. Exports only read, so read-only mode allows them.
  */
@@ -31,6 +35,9 @@ class ExportController extends Controller
 
     /** Unfinished exports per user. */
     private const int MAX_ACTIVE_EXPORTS = 3;
+
+    /** The longest statement accepted for a query export (bytes). */
+    private const int MAX_QUERY_LENGTH = 1_000_000;
 
     /** Virtual schemas mysqldump cannot dump meaningfully. */
     private const array NOT_EXPORTABLE = ['information_schema', 'performance_schema'];
@@ -47,6 +54,11 @@ class ExportController extends Controller
                 array_filter($this->adapter->schema()->databases(), fn (DatabaseInfo $info): bool => ! in_array($info->name, self::NOT_EXPORTABLE, true)),
             ))),
             'database' => $request->string('database')->toString() ?: null,
+            'table' => $request->string('table')->toString() ?: null,
+            // ?export=<id> opens that export (e.g. right after "Export full result" in the SQL editor).
+            'openExport' => $request->filled('export') && Str::isUuid($request->string('export')->toString())
+                ? ExportJob::query()->whereBelongsTo($user)->whereKey($request->string('export')->toString())->first()?->toStatus()
+                : null,
             'exports' => ExportJob::query()->whereBelongsTo($user)->latest()->limit(self::HISTORY_ITEMS)->get()
                 ->map(fn (ExportJob $export): array => $export->toStatus())->all(),
         ]);
@@ -80,13 +92,18 @@ class ExportController extends Controller
             'tables' => ['nullable', 'array', 'max:10000'],
             'tables.*' => ['string', 'max:64', 'distinct'],
             'format' => ['required', Rule::enum(ExportFormat::class)],
-            'content' => ['required', Rule::in(['both', 'structure', 'data'])],
+            'content' => ['required_unless:format,csv,csv.gz', Rule::in(['both', 'structure', 'data'])],
             'includePrograms' => ['boolean'],
         ]);
 
         $database = $validated['database'];
         /** @var list<string> $tables */
         $tables = array_values($validated['tables'] ?? []);
+        $format = ExportFormat::from($validated['format']);
+
+        if ($format->isCsv() && count($tables) !== 1) {
+            return $this->invalid('tables', 'Choose exactly one table for a CSV export.');
+        }
 
         if (in_array($database, self::NOT_EXPORTABLE, true) || $this->adapter->schema()->database($database) === null) {
             return $this->invalid('database', 'That database does not exist or cannot be exported.');
@@ -101,9 +118,7 @@ class ExportController extends Controller
             }
         }
 
-        $active = ExportJob::query()->whereBelongsTo($user)->whereIn('status', [ExportStatus::Queued, ExportStatus::Exporting])->count();
-
-        if ($active >= self::MAX_ACTIVE_EXPORTS) {
+        if ($this->activeExports($user) >= self::MAX_ACTIVE_EXPORTS) {
             return response()->json(['message' => 'You already have '.self::MAX_ACTIVE_EXPORTS.' exports running. Wait for one to finish or cancel it.'], 429);
         }
 
@@ -127,7 +142,6 @@ class ExportController extends Controller
             return response()->json(['message' => 'Your session has expired. Sign in again.'], 401);
         }
 
-        $format = ExportFormat::from($validated['format']);
         $includePrograms = (bool) ($validated['includePrograms'] ?? true);
 
         $export = ExportJob::query()->create([
@@ -135,7 +149,7 @@ class ExportController extends Controller
             'database_name' => $database,
             'tables' => $tables === [] ? null : $tables,
             'format' => $format,
-            'options' => ['content' => $validated['content'], 'includePrograms' => $includePrograms],
+            'options' => $format->isCsv() ? null : ['content' => $validated['content'], 'includePrograms' => $includePrograms],
             'status' => ExportStatus::Queued,
             'file_name' => self::fileName($database, $tables, $format),
             'estimated_bytes' => $estimate,
@@ -144,10 +158,72 @@ class ExportController extends Controller
 
         ExportDatabaseJob::dispatch($export->id);
         $auditLogger->record('export.start', $database, details: [
+            'source' => $export->source(),
             'tables' => $tables === [] ? 'all' : count($tables),
             'format' => $format->value,
-            'content' => $validated['content'],
+            'content' => $format->isCsv() ? null : $validated['content'],
         ]);
+
+        return response()->json($export->refresh()->toStatus(), 201);
+    }
+
+    /**
+     * "Export full result" from the SQL editor: run one read-only statement
+     * again in the worker and write all of its rows as CSV.
+     */
+    public function storeQuery(Request $request, MySQLCredentialStore $credentialStore, AuditLogger $auditLogger): JsonResponse
+    {
+        $user = $this->user($request);
+
+        $validated = $request->validate([
+            'sql' => ['required', 'string', 'max:'.self::MAX_QUERY_LENGTH],
+            'database' => ['nullable', 'string', 'max:64'],
+            'format' => ['required', Rule::in([ExportFormat::Csv->value, ExportFormat::CsvGz->value])],
+        ]);
+
+        $statements = SqlStreamScanner::split($validated['sql']);
+
+        if (count($statements) !== 1) {
+            return $this->invalid('sql', 'Select a single statement to export.');
+        }
+
+        $problem = $statements[0]->exportProblem();
+
+        if ($problem !== null) {
+            return $this->invalid('sql', $problem);
+        }
+
+        $database = $validated['database'] ?? null;
+
+        if ($database !== null && $database !== '' && $this->adapter->schema()->database($database) === null) {
+            return $this->invalid('database', 'That database does not exist.');
+        }
+
+        if ($this->activeExports($user) >= self::MAX_ACTIVE_EXPORTS) {
+            return response()->json(['message' => 'You already have '.self::MAX_ACTIVE_EXPORTS.' exports running. Wait for one to finish or cancel it.'], 429);
+        }
+
+        $credentials = $credentialStore->get();
+
+        if ($credentials === null) {
+            return response()->json(['message' => 'Your session has expired. Sign in again.'], 401);
+        }
+
+        $format = ExportFormat::from($validated['format']);
+
+        $export = ExportJob::query()->create([
+            'user_id' => $user->id,
+            'database_name' => $database ?? '',
+            'query' => $statements[0]->sql,
+            'format' => $format,
+            'status' => ExportStatus::Queued,
+            'file_name' => self::fileName(($database ?: 'query').'-query', [], $format),
+            'credentials' => $credentials,
+        ]);
+
+        ExportDatabaseJob::dispatch($export->id);
+        // The statement itself is not audited (it may contain sensitive values), only that it was exported.
+        $auditLogger->record('export.start', $database ?: null, details: ['source' => 'query', 'format' => $format->value]);
 
         return response()->json($export->refresh()->toStatus(), 201);
     }
@@ -171,8 +247,19 @@ class ExportController extends Controller
             ->update(['status' => ExportStatus::Cancelled, 'credentials' => null, 'finished_at' => now()]);
 
         // Running: the worker checks this flag, stops mysqldump and deletes the partial file.
-        ExportJob::query()->whereKey($export->id)->where('status', ExportStatus::Exporting)
+        $running = ExportJob::query()->whereKey($export->id)->where('status', ExportStatus::Exporting)
             ->update(['cancel_requested' => true]);
+
+        // A CSV query may still be running in MySQL before its first row: stop it there too.
+        $connectionId = ExportJob::query()->whereKey($export->id)->value('mysql_connection_id');
+
+        if ($running > 0 && is_numeric($connectionId)) {
+            try {
+                $this->adapter->queries()->cancel((int) $connectionId);
+            } catch (DatabaseOperationException) {
+                // The worker still stops at its next progress check.
+            }
+        }
 
         return response()->json($export->refresh()->toStatus());
     }
@@ -191,7 +278,7 @@ class ExportController extends Controller
         File::delete($export->path());
 
         if ($export->status === ExportStatus::Completed) {
-            $export->update(['status' => ExportStatus::Expired, 'expires_at' => now()]);
+            $export->update(['status' => ExportStatus::Expired, 'expires_at' => now(), 'query' => null]);
         }
 
         return response()->json($export->refresh()->toStatus());
@@ -209,7 +296,7 @@ class ExportController extends Controller
         $auditLogger->record('export.download', $export->database_name, details: ['format' => $export->format->value, 'bytes' => $export->file_bytes]);
 
         return response()->download($export->path(), $export->file_name, [
-            'Content-Type' => $export->format->isCompressed() ? 'application/gzip' : 'application/sql',
+            'Content-Type' => $export->format->contentType(),
             'Cache-Control' => 'no-store, private',
         ]);
     }
@@ -239,6 +326,11 @@ class ExportController extends Controller
         $power = $bytes > 0 ? min((int) floor(log($bytes, 1024)), count($units) - 1) : 0;
 
         return round($bytes / 1024 ** $power, 1).' '.$units[$power];
+    }
+
+    private function activeExports(User $user): int
+    {
+        return ExportJob::query()->whereBelongsTo($user)->whereIn('status', [ExportStatus::Queued, ExportStatus::Exporting])->count();
     }
 
     private function invalid(string $field, string $message): JsonResponse

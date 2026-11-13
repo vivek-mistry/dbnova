@@ -4,7 +4,7 @@ import { computed } from 'vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
-import { formatBytes } from '@/lib/format';
+import { formatBytes, formatNumber } from '@/lib/format';
 import type { ExportJobStatus, ExportStatus } from '@/types';
 
 const props = defineProps<{
@@ -29,8 +29,19 @@ const running = computed(
     () => props.job.status === 'queued' || props.job.status === 'exporting',
 );
 
+const isCsv = computed(
+    () => props.job.format === 'csv' || props.job.format === 'csv.gz',
+);
+const compressed = computed(
+    () => props.job.format === 'sql.gz' || props.job.format === 'csv.gz',
+);
+
 const what = computed(() => {
     const tables = props.job.tables;
+
+    if (props.job.source === 'query') {
+        return 'SQL editor result';
+    }
 
     if (tables === null) {
         return 'all tables';
@@ -39,13 +50,14 @@ const what = computed(() => {
     return tables.length === 1 ? tables[0] : `${tables.length} tables`;
 });
 
-const contentLabel = computed(
-    () =>
-        ({
-            both: 'structure and data',
-            structure: 'structure only',
-            data: 'data only',
-        })[props.job.options.content ?? 'both'],
+const contentLabel = computed(() =>
+    isCsv.value
+        ? 'CSV'
+        : {
+              both: 'structure and data',
+              structure: 'structure only',
+              data: 'data only',
+          }[props.job.options.content ?? 'both'],
 );
 
 const elapsed = computed(() => {
@@ -77,9 +89,16 @@ const elapsed = computed(() => {
             <div class="min-w-0">
                 <p class="truncate font-medium">{{ job.fileName }}</p>
                 <p class="text-sm text-muted-foreground">
-                    <code>{{ job.database }}</code> · {{ what }} ·
-                    {{ contentLabel }}
+                    <template v-if="job.database"
+                        ><code>{{ job.database }}</code> ·
+                    </template>
+                    {{ what }} · {{ contentLabel }}
                 </p>
+                <pre
+                    v-if="job.query"
+                    class="mt-2 max-h-24 overflow-auto rounded bg-muted px-2 py-1 font-mono text-xs whitespace-pre-wrap"
+                    data-test="export-query"
+                    >{{ job.query }}</pre>
             </div>
             <Button
                 v-if="!running"
@@ -100,17 +119,29 @@ const elapsed = computed(() => {
                     Waiting for a queue worker…
                 </span>
                 <span v-else-if="job.cancelRequested">Stopping…</span>
+                <span v-else-if="isCsv && job.rowsWritten === 0">
+                    Running the query; rows are written as soon as MySQL sends
+                    them…
+                </span>
+                <span v-else-if="isCsv">
+                    Wrote {{ formatNumber(job.rowsWritten) }} rows ({{
+                        formatBytes(job.fileBytes)
+                    }})<template v-if="elapsed"> in {{ elapsed }}</template>
+                </span>
                 <span v-else>
                     Dumped {{ formatBytes(job.bytesWritten) }} of SQL<template
-                        v-if="job.format === 'sql.gz'"
+                        v-if="compressed"
                     >
                         ({{ formatBytes(job.fileBytes) }} compressed)</template
                     ><template v-if="elapsed"> in {{ elapsed }}</template>
                 </span>
             </div>
-            <p class="text-xs text-muted-foreground">
+            <p
+                v-if="job.source !== 'query'"
+                class="text-xs text-muted-foreground"
+            >
                 The table data is about {{ formatBytes(job.estimatedBytes) }}
-                (an estimate from MySQL's catalog; the dump is often larger or
+                (an estimate from MySQL's catalog; the file is often larger or
                 smaller).
             </p>
             <div>
@@ -131,9 +162,15 @@ const elapsed = computed(() => {
             <p class="text-sm">
                 <Badge>Completed</Badge>
                 <span class="ml-2">
+                    <template v-if="isCsv"
+                        >{{ formatNumber(job.rowsWritten) }} rows,
+                    </template>
                     {{ formatBytes(job.fileBytes)
-                    }}<template v-if="job.format === 'sql.gz'">
-                        ({{ formatBytes(job.bytesWritten) }} of SQL)</template
+                    }}<template v-if="compressed">
+                        ({{
+                            formatBytes(job.bytesWritten)
+                        }}
+                        uncompressed)</template
                     ><template v-if="elapsed">, took {{ elapsed }}</template>
                 </span>
             </p>

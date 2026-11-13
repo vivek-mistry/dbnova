@@ -121,6 +121,22 @@ State machine (`ExportStatus`): `queued → exporting → completed | failed | c
 - Read-only mode allows exports, because they only read.
 - Audit: `export.start / completed / failed / cancelled / download`, with names and sizes only.
 
-### CSV (7b)
+### CSV (built in 7b)
 
-- An unbuffered PDO cursor → `fputcsv` to a file, **always through the job** (user decision: no direct streamed responses), for a table or a full SQL editor result.
+- **Two entry points.** Neither streams CSV directly in a response; both always go through `ExportDatabaseJob` (user decision).
+    - **One table:** `POST /exports` with `format: csv|csv.gz` and exactly one table. Reach it from the Export page or a table's **Export** tab (`?database=&table=` preselects the table).
+    - **A SQL editor result:** `POST /exports/query {sql, database?, format}`. "Export full result (CSV)" in the editor sends the current statement. The scanner must find exactly **one** statement, and `SqlStatement::isExportableQuery()` must hold (SELECT, WITH, SHOW, DESCRIBE/DESC, EXPLAIN; not USE or HELP). The statement is stored on `export_jobs.query`. The audit log records only that a query was exported, never its text.
+- **`MySQLExporter::exportCsv()`:**
+    - `USE <database>`, then `SET SESSION max_execution_time = 0` (a long export is not a runaway editor query), then `START TRANSACTION READ ONLY` (writes fail, even from stored functions, and the rows come from a consistent snapshot).
+    - The statement then runs on an **unbuffered** cursor over the text protocol, the same way the SQL editor runs it. A table becomes `SELECT * FROM `db`.`t`` with names from `IdentifierQuoter`, checked against the catalog first.
+    - Rows are batched into about 1 MB pieces and written through the shared `ExportFileWriter` (exclusive create, 0600, optional incremental gzip, deleted on abort).
+    - Afterwards the session is restored: buffered mode, native prepares, `ROLLBACK`, and the editor's time limit.
+- **Format:** RFC 4180, UTF-8 with no BOM, CRLF line endings and a header row of column names.
+    - Every text value is quoted, and `"` is doubled.
+    - NULL is an **empty unquoted** field, so an empty string (`""`) stays distinguishable from NULL.
+    - Numbers are unquoted. Binary values (not valid UTF-8) are written as `0x…` hex.
+- **Progress and heartbeat:** progress is reported before the query, as soon as it returns, and then every 5,000 rows or 1 MB. Bytes, file bytes and `rows_written` are stored.
+    - MySQL may work for minutes before the first row of a heavy query (a big sort or join), and PHP can't report in while it waits. So `onStart` stores the worker's `mysql_connection_id` and sets `heartbeat_at` **in the future** by `export_query_lease_seconds` (default 30 min).
+    - Recovery therefore doesn't mistake the wait for a dead worker. The cost is that a worker that dies during that wait is detected up to 30 min late.
+- **Cancel** sets `cancel_requested`, and if a CSV query is running also sends `KILL QUERY <mysql_connection_id>` from the user's own session. The job reports a query error that follows a cancel as `cancelled`, not `failed`. Either way the partial file is deleted.
+- **What it can't do:** the query runs again in the worker, so its result reflects the data at export time, not at the time of the editor preview.

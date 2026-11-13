@@ -71,7 +71,8 @@ class PruneTempFilesCommand extends Command
 
         foreach (ExportJob::query()->where('status', ExportStatus::Completed)->where('expires_at', '<', now())->get() as $export) {
             File::delete($export->path());
-            $export->update(['status' => ExportStatus::Expired]);
+            // The statement may contain literals (emails, tokens); it is not needed once the file is gone.
+            $export->update(['status' => ExportStatus::Expired, 'query' => null]);
             $expiredExports++;
         }
 

@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\URL;
  * @property int $user_id
  * @property string $database_name
  * @property list<string>|null $tables
+ * @property string|null $query
  * @property ExportFormat $format
  * @property array<string, mixed>|null $options
  * @property ExportStatus $status
@@ -29,6 +30,8 @@ use Illuminate\Support\Facades\URL;
  * @property int $estimated_bytes
  * @property int $bytes_written
  * @property int $file_bytes
+ * @property int $rows_written
+ * @property int|null $mysql_connection_id
  * @property string|null $last_error
  * @property bool $cancel_requested
  * @property int|null $worker_pid
@@ -42,9 +45,9 @@ use Illuminate\Support\Facades\URL;
  * @property-read User|null $user
  */
 #[Fillable([
-    'user_id', 'database_name', 'tables', 'format', 'options', 'status', 'file_name', 'estimated_bytes',
-    'bytes_written', 'file_bytes', 'last_error', 'cancel_requested', 'worker_pid', 'credentials',
-    'heartbeat_at', 'started_at', 'finished_at', 'expires_at',
+    'user_id', 'database_name', 'tables', 'query', 'format', 'options', 'status', 'file_name', 'estimated_bytes',
+    'bytes_written', 'file_bytes', 'rows_written', 'last_error', 'cancel_requested', 'worker_pid',
+    'mysql_connection_id', 'credentials', 'heartbeat_at', 'started_at', 'finished_at', 'expires_at',
 ])]
 #[Hidden(['credentials'])]
 class ExportJob extends Model
@@ -67,6 +70,8 @@ class ExportJob extends Model
             'estimated_bytes' => 'integer',
             'bytes_written' => 'integer',
             'file_bytes' => 'integer',
+            'rows_written' => 'integer',
+            'mysql_connection_id' => 'integer',
             'cancel_requested' => 'boolean',
             'worker_pid' => 'integer',
             'credentials' => 'encrypted:array',
@@ -83,6 +88,21 @@ class ExportJob extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * What is exported: a whole database or some tables (SQL), one table (CSV) or a SQL editor result (CSV).
+     *
+     * @return 'database'|'tables'|'table'|'query'
+     */
+    public function source(): string
+    {
+        return match (true) {
+            $this->query !== null => 'query',
+            $this->format->isCsv() => 'table',
+            $this->tables === null => 'database',
+            default => 'tables',
+        };
     }
 
     /**
@@ -124,8 +144,10 @@ class ExportJob extends Model
 
         return [
             'id' => $this->id,
-            'database' => $this->database_name,
+            'database' => $this->database_name === '' ? null : $this->database_name,
             'tables' => $this->tables,
+            'source' => $this->source(),
+            'query' => $this->query === null ? null : mb_strimwidth($this->query, 0, 300, '…'),
             'format' => $this->format->value,
             'options' => $this->options ?? (object) [],
             'status' => $this->status->value,
@@ -133,6 +155,7 @@ class ExportJob extends Model
             'estimatedBytes' => $this->estimated_bytes,
             'bytesWritten' => $this->bytes_written,
             'fileBytes' => $this->file_bytes,
+            'rowsWritten' => $this->rows_written,
             'lastError' => $this->last_error,
             'cancelRequested' => $this->cancel_requested,
             'downloadUrl' => $downloadUrl,

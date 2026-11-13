@@ -1,6 +1,6 @@
 # Phase 7 — Export engine
 
-**Status:** in progress (7a committed; 7b not started)
+**Status:** review (7a committed; 7b built, awaiting review)
 **Goal:** Export databases and tables to SQL / SQL.GZ and tables or query results to CSV, without exhausting memory.
 **New dependencies:** none.
 **Read first:** `docs/IMPORT_EXPORT_ENGINE.md` (Export section).
@@ -24,8 +24,8 @@
 
 ### CSV (7b)
 
-- [ ] CSV: an unbuffered PDO cursor → `fputcsv`, always through the job (user decision)
-- [ ] "Export full result" from the SQL editor (Phase 5 hook; read-only statements only)
+- [x] CSV: an unbuffered PDO cursor in a read-only transaction → RFC 4180 writer (own `csvLine`, so NULL ≠ ""), always through the job (user decision); `.csv` / `.csv.gz`; a table's **Export** tab preselects it
+- [x] "Export full result (CSV)" from the SQL editor (`POST /exports/query`; single read-only statement, no locking/INTO; heartbeat lease while MySQL prepares the first row; Cancel sends KILL QUERY)
 
 ## Tests
 
@@ -59,4 +59,28 @@
     - **LOW-3:** no rate limit on cancel/destroy (owner-scoped, harmless).
     - Everything else was found sound: argv after `--`, credentials, signed downloads, filenames, paths, cleanup, read-only, XSS.
 - Tests: 556 passing against real MySQL (57 skip without it). `composer ci:check` is green.
+- Not verified in a browser yet.
+
+### 7b — CSV export (2026-11-13, awaiting review)
+
+- **What's built:**
+    - Table CSV, from the Export page or a table's **Export** tab.
+    - "Export full result (CSV)" in the SQL editor, which re-runs the statement in the worker.
+    - Both write `.csv` or `.csv.gz` through the shared `ExportFileWriter`, with the same downloads, expiry, recovery and history as SQL exports.
+- **Stress (10M rows):**
+    - Table to `.csv` (3.7 GB): 23 s.
+    - Table to `.csv.gz`: 43 s.
+    - Filtered and sorted query (9.5M rows): 204 s, with the first row after 186 s.
+    - PHP memory stayed flat at 25–29 MB, and the file's line count matched the row count.
+- **Security review 7b** (dbnova-security-reviewer):
+    - **HIGH-1:** with pdo_mysql's default multi-statements on, `DELIMITER $$ … $$` and `/*!; COMMIT; DELETE … # */` smuggled writes past the single-statement check. The reviewer deleted rows through CSV query exports, and through the Phase 5 SQL editor in read-only mode; this also bypassed its destructive confirmation.
+      **Fixed:** every connection now has multi-statements off; exports also refuse DELIMITER and an inner `;`, and run in a read-only session. Regression tests replay the payloads, and were confirmed to fail without the fix.
+    - **MEDIUM-1:** CSV formula injection. Documented in the UI and SECURITY.md (CSV stays exact); an opt-in escape mode is up to the user.
+    - **LOW fixes:**
+        - Connect before creating the file.
+        - Refuse `FOR SHARE`, `FOR UPDATE`, `LOCK IN SHARE MODE` and `INTO`.
+        - The lease ends as soon as the query returns, and is capped at 4 h.
+        - Query text is dropped when the file expires, and is never in the audit log, including MySQL error text.
+    - **Documented, not fixed:** an orphaned query after a worker crash isn't killed (no credentials remain), and a cancel in the microsecond before the query starts is only noticed at the first row.
+- Tests: 605 passing against real MySQL (76 skip without it). `composer ci:check` is green.
 - Not verified in a browser yet.

@@ -1,15 +1,16 @@
 # DBNova — Current Task
 
-**Current phase:** Phase 7 — Export engine (7a committed; 7b next)
+**Current phase:** Phase 7 — Export engine (7a committed; 7b built, awaiting review)
 **Phase file:** [.claude/phases/phase-07-export.md](.claude/phases/phase-07-export.md)
-**Status:** In progress (7b next)
+**Status:** Review (7b)
 **Branch:** `phase/00-architecture` (all phases so far)
 
 ## Now
 
 - User review of 7a in the browser (needs `php artisan queue:work --queue=imports,exports,default` and `php artisan schedule:work`, plus `DBNOVA_MYSQL_BIN` / `DBNOVA_MYSQLDUMP_BIN` in `.env`):
   Import / Export → Export tab → database → all or chosen tables → format → Export → Download. Try: Cancel mid-way, Delete file, re-import the download on the Import tab
-- Then 7b — CSV of tables and SQL editor results (always through the job)
+- Review 7b in the browser: a table's Export tab → CSV → Download; SQL editor → run a SELECT → "Export full result (CSV)" → View; Cancel a slow query export
+- Then close Phase 7 (`/phase-done 7`) → Phase 8 (monitoring)
 
 ## Done
 
@@ -28,6 +29,9 @@
 - Run real-MySQL tests: `DBNOVA_TEST_DB_USERNAME=dbnova_test DBNOVA_TEST_DB_PASSWORD=test DBNOVA_MYSQL_BIN=/usr/local/mysql/bin/mysql DBNOVA_MYSQLDUMP_BIN=/usr/local/mysql/bin/mysqldump php artisan test --compact`
 
 ## Blocked / waiting on user
+
+- Approve the 7b commit (closes Phase 7)
+- Optional: an opt-in "safe for spreadsheets" CSV mode (escapes = + - @), yes or no
 
 - Decide on LOW-2: a cap on completed exports kept per user (e.g. 10 files or N GB), or leave as is
 - Add `DBNOVA_MYSQL_BIN=/usr/local/mysql/bin/mysql` and `DBNOVA_MYSQLDUMP_BIN=/usr/local/mysql/bin/mysqldump` to `.env`

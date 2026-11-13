@@ -6,7 +6,7 @@ A self-hosted MySQL manager: a faster, more trustworthy alternative to phpMyAdmi
 
 DBNova manages **one MySQL server** running on the same machine or VPS. You sign in with a MySQL account, and that account's grants decide what you can do. It's built for everyday browsing and for importing and exporting production-sized databases (10 GB and more) without running out of memory.
 
-> **Status:** in active development. Phases 0–6 and the SQL half of the export engine (7a) are done. Next up: CSV export, then monitoring, hardening and a release with Docker support. See [Roadmap](#roadmap).
+> **Status:** in active development. Phases 0–7 (through the import and export engines) are done. Next up: monitoring, then hardening and a release with Docker support. See [Roadmap](#roadmap).
 
 ## Features
 
@@ -25,7 +25,10 @@ DBNova manages **one MySQL server** running on the same machine or VPS. You sign
     - Chunked, resumable uploads.
     - A streaming check that rejects truncated, multi-database or non-dump files before anything reaches MySQL.
     - A queued import that reports honest progress (bytes sent, never "% committed"), with cancel, recovery and MySQL errors at the line they occur in your file.
-- **Exports.** A whole database or chosen tables to `.sql` or `.sql.gz` via `mysqldump`, in a consistent snapshot. Exports run in a background job and are downloaded through short-lived signed links.
+- **Exports.**
+    - **SQL dumps:** a whole database or chosen tables to `.sql` or `.sql.gz` via `mysqldump`, in a consistent snapshot, ready to re-import anywhere.
+    - **CSV:** one table, or the full result of a SQL editor query, to `.csv` or `.csv.gz`. NULL stays distinguishable from empty text, and query exports are read-only.
+    - Exports run in a background job, with progress and cancel, and are downloaded through short-lived signed links.
 - **Safety.** A read-only mode enforced in the data layer, typed confirmations for destructive actions, and an audit log that never stores row values.
 
 ### Measured on a laptop (MySQL 8.0.39)
@@ -34,6 +37,7 @@ DBNova manages **one MySQL server** running on the same machine or VPS. You sign
 | -------------------------------------------- | --------------------------------------------- |
 | Import 2 GB `.sql` (20.1M rows)              | 117 s, worker memory flat (+6 MB)             |
 | Export 10M rows / 3.7 GB of SQL to `.sql.gz` | 26 s, worker memory flat (+4 MB), 261 MB file |
+| Export a 10M-row table to `.csv`             | 23 s, worker memory flat (+2 MB)              |
 | Export → re-import round trip                | identical row counts and table checksums      |
 
 ## Tech stack
@@ -108,14 +112,14 @@ To generate stress data, use `php artisan dbnova:stress:seed-table` (a 10M-row t
 
 ## Roadmap
 
-| Phase | Scope                                                                 | Status      |
-| ----- | --------------------------------------------------------------------- | ----------- |
-| 0–5   | Architecture, foundation, explorer, table browser, schema, SQL editor | done        |
-| 6     | Large import engine                                                   | done        |
-| 7     | Export engine (7a SQL done, 7b CSV next)                              | in progress |
-| 8     | Monitoring: process list, variables, charts, table maintenance        | planned     |
-| 9     | Hardening and stress testing                                          | planned     |
-| 10    | Release, Docker Compose, install guide                                | planned     |
+| Phase | Scope                                                                 | Status  |
+| ----- | --------------------------------------------------------------------- | ------- |
+| 0–5   | Architecture, foundation, explorer, table browser, schema, SQL editor | done    |
+| 6     | Large import engine                                                   | done    |
+| 7     | Export engine: SQL dumps and CSV                                      | done    |
+| 8     | Monitoring: process list, variables, charts, table maintenance        | planned |
+| 9     | Hardening and stress testing                                          | planned |
+| 10    | Release, Docker Compose, install guide                                | planned |
 
 The phase plans live in [`.claude/phases/`](.claude/phases/README.md). The architecture docs and decision records are in [`.claude/docs/`](.claude/docs/).
 

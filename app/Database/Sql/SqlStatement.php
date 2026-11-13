@@ -193,6 +193,41 @@ final readonly class SqlStatement
     }
 
     /**
+     * A read-only statement that returns rows, so its result can be exported (USE and HELP do not qualify).
+     */
+    public function isExportableQuery(): bool
+    {
+        return $this->exportProblem() === null;
+    }
+
+    /**
+     * Why this statement cannot be exported as a query result, or null.
+     *
+     * The export re-runs the statement in a worker for a long time, so on
+     * top of being read-only it must be exactly what the scanner sees: no
+     * custom DELIMITER and no ";" in its code (incl. /*! *\/ comments),
+     * which could hide a second statement; no locking clauses, which
+     * would block the application's writes while rows stream; and no
+     * INTO, which writes a file on the server or sets variables.
+     */
+    public function exportProblem(): ?string
+    {
+        if (! $this->isReadOnly() || in_array($this->keyword(), ['USE', 'HELP'], true)) {
+            return 'Only read-only queries (SELECT, WITH, SHOW, DESCRIBE, EXPLAIN) can be exported to CSV.';
+        }
+
+        if ($this->delimiter !== ';' || str_contains($this->code(), ';')) {
+            return 'The query must be a single statement without DELIMITER or ";" inside it.';
+        }
+
+        if (preg_match('/\b(FOR\s+(UPDATE|SHARE)|LOCK\s+IN\s+SHARE\s+MODE|INTO)\b/i', $this->code()) === 1) {
+            return 'Queries with FOR UPDATE / FOR SHARE / LOCK IN SHARE MODE or INTO cannot be exported: they lock rows or write elsewhere.';
+        }
+
+        return null;
+    }
+
+    /**
      * DROP and TRUNCATE, and UPDATE or DELETE without a WHERE clause.
      */
     public function isDestructive(): bool

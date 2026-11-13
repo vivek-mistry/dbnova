@@ -102,6 +102,10 @@ return [
     // The same for a running export (it also writes a heartbeat every 2 s).
     'export_heartbeat_stale_seconds' => (int) env('DBNOVA_EXPORT_HEARTBEAT_STALE_SECONDS', 120),
 
+    // A CSV export cannot report in while MySQL prepares the first row of its query (e.g. a big sort);
+    // the job takes a heartbeat lease this long first. A worker that dies meanwhile is detected late by this much.
+    'export_query_lease_seconds' => (int) env('DBNOVA_EXPORT_QUERY_LEASE_SECONDS', 1800),
+
     /*
     |--------------------------------------------------------------------------
     | Read-only Mode

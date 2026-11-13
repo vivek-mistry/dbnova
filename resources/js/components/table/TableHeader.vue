@@ -12,6 +12,7 @@ import {
     show as tableShow,
     structure as tableStructure,
 } from '@/routes/tables';
+import { index as exportsIndex } from '@/routes/exports';
 import { index as sqlIndex } from '@/routes/sql';
 import type { TableInfo } from '@/types';
 
@@ -38,6 +39,12 @@ const tabs = [
     {
         title: 'SQL',
         href: sqlIndex({
+            query: { database: props.database, table: props.table.name },
+        }),
+    },
+    {
+        title: 'Export',
+        href: exportsIndex({
             query: { database: props.database, table: props.table.name },
         }),
     },

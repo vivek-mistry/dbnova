@@ -58,6 +58,7 @@ Route::middleware(['auth', EnsureMySQLCredentials::class])->group(function () {
     Route::get('exports', [ExportController::class, 'index'])->name('exports.index');
     Route::get('exports/databases/{database}/tables', [ExportController::class, 'tables'])->name('exports.tables');
     Route::post('exports', [ExportController::class, 'store'])->middleware('throttle:30,1')->name('exports.store');
+    Route::post('exports/query', [ExportController::class, 'storeQuery'])->middleware('throttle:30,1')->name('exports.query');
     Route::get('exports/{export}', [ExportController::class, 'show'])->whereUuid('export')->name('exports.show');
     Route::post('exports/{export}/cancel', [ExportController::class, 'cancel'])->whereUuid('export')->name('exports.cancel');
     Route::delete('exports/{export}', [ExportController::class, 'destroy'])->whereUuid('export')->name('exports.destroy');

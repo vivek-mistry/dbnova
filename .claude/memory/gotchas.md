@@ -43,4 +43,7 @@ Append entries during and at the end of each phase. Use the format `Phase N — 
 - Phase 6 — Laravel's `InvokedProcess` contract has no `stop()`. — `ProcessRunner::terminate()` sends SIGTERM, waits up to 5 s, then sends SIGKILL.
 - Phase 7 — `npx prettier` is not this repo's formatter. It reformats Vue files with double quotes. — Use `npx vp fmt <paths>` / `npm run check` (Vite+).
 - Phase 7 — PHPStan narrows `$process->isRunning()` to a constant after the first call in the same scope. — Put SIGTERM/SIGKILL loops in their own method, or use Symfony's `$process->stop($timeout, SIGKILL)`.
+- Phase 7 — `KILL QUERY` on a `SELECT SLEEP(n)` makes it return 1 instead of failing, so it can't simulate a cancelled query. A `/*+ MAX_EXECUTION_TIME(ms) */` hint on a heavy cross join gives a real mid-query error. — Use that in tests.
+- Phase 7 — Never `pcntl_fork()` inside a test that holds an open PDO connection. The child's exit tears down shared state, and its `afterEach` never runs, so it leaves `dbnova_test_*` databases behind. — Simulate from one process instead.
+- Phase 7 — Pest has no `->before()` on a test. — Put the setup in the test body or a `beforeEach`.
 - Phase 0 — `mysql` on PATH is a shell alias. — Always resolve binaries from config, never from `PATH` lookups that rely on the interactive shell.

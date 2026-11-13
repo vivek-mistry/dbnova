@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Database\Contracts\DatabaseAdapterInterface;
+use App\Database\DTOs\Export\CsvExportRequest;
 use App\Database\DTOs\Export\ExportRequest;
 use App\Database\Exceptions\DatabaseOperationException;
 use App\Database\Export\ExportCancelledException;
@@ -15,7 +16,8 @@ use Illuminate\Support\Facades\File;
 use Throwable;
 
 /**
- * Dumps a database to a file with mysqldump. The payload is the export id
+ * Dumps a database to a file with mysqldump, or writes a table or a SQL
+ * editor result as CSV. The payload is the export id
  * only; the MySQL credentials are read (encrypted) from the export and
  * wiped as soon as the dump tool has them.
  */
@@ -30,6 +32,9 @@ class ExportDatabaseJob implements ShouldQueue
     public int $timeout = 86400;
 
     public bool $failOnTimeout = true;
+
+    /** Upper bound for the heartbeat lease, whatever the config says (4 h). */
+    private const int MAX_QUERY_LEASE_SECONDS = 14400;
 
     /** Progress and the heartbeat are written at most this often (seconds). */
     private const float PROGRESS_INTERVAL = 2.0;
@@ -68,46 +73,76 @@ class ExportDatabaseJob implements ShouldQueue
         $directory = config()->string('dbnova.paths.exports');
         $lastWrite = 0.0;
 
+        $onProgress = function (int $bytesWritten, int $fileBytes, ?int $rowsWritten = null) use (&$lastWrite, $directory, $minimumFreeBytes): void {
+            // A CSV export reports (0, 0, 0) only before its query and when the query returns:
+            // always record those, so the heartbeat lease ends as soon as rows start arriving.
+            $queryMilestone = $rowsWritten === 0 && $bytesWritten === 0;
+
+            if (! $queryMilestone && microtime(true) - $lastWrite < self::PROGRESS_INTERVAL) {
+                return;
+            }
+
+            $lastWrite = microtime(true);
+            ExportJob::query()->whereKey($this->exportJobId)->update([
+                'bytes_written' => $bytesWritten,
+                'file_bytes' => $fileBytes,
+                'rows_written' => $rowsWritten ?? 0,
+                'heartbeat_at' => now(),
+            ]);
+
+            if (ExportJob::query()->whereKey($this->exportJobId)->value('cancel_requested')) {
+                throw new ExportCancelledException;
+            }
+
+            $free = @disk_free_space($directory);
+
+            if ($free !== false && $free < $minimumFreeBytes) {
+                throw new DatabaseOperationException('The export was stopped because the disk is almost full (less than '.self::gigabytes($minimumFreeBytes).' free).');
+            }
+        };
+
         try {
-            $result = $adapter->exporter()->export(
-                new ExportRequest(
-                    $export->database_name,
-                    $credentials,
-                    $export->path(),
-                    $export->format,
-                    $export->tables ?? [],
-                    in_array($export->options['content'] ?? null, ['structure', 'data'], true) ? $export->options['content'] : 'both',
-                    (bool) ($export->options['includePrograms'] ?? true),
-                ),
-                function (int $bytesWritten, int $fileBytes) use (&$lastWrite, $directory, $minimumFreeBytes): void {
-                    if (microtime(true) - $lastWrite < self::PROGRESS_INTERVAL) {
-                        return;
-                    }
-
-                    $lastWrite = microtime(true);
-                    ExportJob::query()->whereKey($this->exportJobId)->update([
-                        'bytes_written' => $bytesWritten,
-                        'file_bytes' => $fileBytes,
-                        'heartbeat_at' => now(),
-                    ]);
-
-                    if (ExportJob::query()->whereKey($this->exportJobId)->value('cancel_requested')) {
-                        throw new ExportCancelledException;
-                    }
-
-                    $free = @disk_free_space($directory);
-
-                    if ($free !== false && $free < $minimumFreeBytes) {
-                        throw new DatabaseOperationException('The export was stopped because the disk is almost full (less than '.self::gigabytes($minimumFreeBytes).' free).');
-                    }
-                },
-            );
+            $result = $export->format->isCsv()
+                ? $adapter->exporter()->exportCsv(
+                    new CsvExportRequest(
+                        $credentials,
+                        $export->path(),
+                        $export->format,
+                        $export->database_name === '' ? null : $export->database_name,
+                        $export->query === null ? ($export->tables[0] ?? null) : null,
+                        $export->query,
+                    ),
+                    $onProgress,
+                    function (int $connectionId): void {
+                        // MySQL may work for a long time before the first row arrives, and this
+                        // process cannot report in meanwhile: take a heartbeat lease so recovery
+                        // does not mistake the wait for a dead worker.
+                        ExportJob::query()->whereKey($this->exportJobId)->update([
+                            'mysql_connection_id' => $connectionId,
+                            'heartbeat_at' => now()->addSeconds(min(config()->integer('dbnova.export_query_lease_seconds'), self::MAX_QUERY_LEASE_SECONDS)),
+                        ]);
+                    },
+                )
+                : $adapter->exporter()->export(
+                    new ExportRequest(
+                        $export->database_name,
+                        $credentials,
+                        $export->path(),
+                        $export->format,
+                        $export->tables ?? [],
+                        in_array($export->options['content'] ?? null, ['structure', 'data'], true) ? $export->options['content'] : 'both',
+                        (bool) ($export->options['includePrograms'] ?? true),
+                    ),
+                    $onProgress,
+                );
         } catch (ExportCancelledException) {
             $this->finish(ExportStatus::Cancelled, null);
 
             return;
         } catch (DatabaseOperationException $exception) {
-            $this->finish(ExportStatus::Failed, $exception->getMessage());
+            // Cancel stops a running CSV query with KILL QUERY, which surfaces here as an error.
+            $cancelled = (bool) ExportJob::query()->whereKey($this->exportJobId)->value('cancel_requested');
+            $this->finish($cancelled ? ExportStatus::Cancelled : ExportStatus::Failed, $cancelled ? null : $exception->getMessage());
 
             return;
         }
@@ -118,7 +153,7 @@ class ExportDatabaseJob implements ShouldQueue
             return;
         }
 
-        $this->finish(ExportStatus::Completed, null, $result->bytesWritten, $result->fileBytes);
+        $this->finish(ExportStatus::Completed, null, $result->bytesWritten, $result->fileBytes, $result->rowsWritten);
     }
 
     /**
@@ -146,15 +181,20 @@ class ExportDatabaseJob implements ShouldQueue
         }
     }
 
-    private function finish(ExportStatus $status, ?string $error, ?int $bytesWritten = null, ?int $fileBytes = null): void
+    private function finish(ExportStatus $status, ?string $error, ?int $bytesWritten = null, ?int $fileBytes = null, ?int $rowsWritten = null): void
     {
         $attributes = [
             'status' => $status,
             'last_error' => $error,
             'credentials' => null,
+            'mysql_connection_id' => null,
             'heartbeat_at' => now(),
             'finished_at' => now(),
         ];
+
+        if ($rowsWritten !== null) {
+            $attributes['rows_written'] = $rowsWritten;
+        }
 
         if ($bytesWritten !== null) {
             $attributes['bytes_written'] = $bytesWritten;
@@ -196,14 +236,21 @@ class ExportDatabaseJob implements ShouldQueue
             'user_id' => $export->user_id,
             'mysql_username' => $export->user?->username,
             'action' => 'export.'.$status->value,
-            'database_name' => $export->database_name,
+            'database_name' => $export->database_name === '' ? null : $export->database_name,
             'details' => [
+                'source' => $export->source(),
                 'tables' => $export->tables === null ? 'all' : count($export->tables),
                 'format' => $export->format->value,
                 'bytes' => $export->bytes_written,
+                'rows' => $export->format->isCsv() ? $export->rows_written : null,
             ],
             'succeeded' => $status === ExportStatus::Completed,
-            'error' => $error === null ? null : mb_strimwidth($error, 0, 500, '…'),
+            // MySQL errors quote the SQL near the problem; a query export's SQL stays out of the audit log.
+            'error' => match (true) {
+                $error === null => null,
+                $export->source() === 'query' => 'The query export failed.',
+                default => mb_strimwidth($error, 0, 500, '…'),
+            },
         ]);
     }
 

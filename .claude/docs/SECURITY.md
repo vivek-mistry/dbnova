@@ -52,6 +52,23 @@ DBNova is effectively a superuser console for a MySQL server. Its threat model a
     - Downloads need a temporary signed URL (≤ `export_link_minutes`, never past the file's expiry) **and** the signed-in owner. The response is `Cache-Control: no-store`, and the download filename keeps only `[A-Za-z0-9_.-]`.
     - Read-only mode allows exports.
     - The `mysql` system database can be exported, because what a user can dump is decided by their MySQL grants.
+- **One statement per connection call** (security review 7b, HIGH-1).
+    - Every PDO connection is opened with `ATTR_MULTI_STATEMENTS = false` in `MySQLConnector`, after any caller options, so it can't be switched back on.
+    - With multi-statements on, the server split on `;` that DBNova's scanner treats as part of one statement: inside a `DELIMITER $$ … $$` block, or inside a `/*! … */` comment. A "single SELECT" could then carry `COMMIT; DELETE …`. The reviewer reproduced it against MySQL 8.0.39 in two places:
+        - the CSV query export, where `COMMIT` ended the read-only transaction;
+        - the SQL editor in read-only mode, where `SET SESSION TRANSACTION READ WRITE` undid the guard. It also bypassed the destructive-statement confirmation.
+    - Regression tests replay both payloads, and fail if multi-statements are turned back on.
+- CSV exports (7b):
+    - **Query exports** must pass `SqlStatement::exportProblem()`:
+        - one statement;
+        - a read-only keyword (not USE or HELP);
+        - delimiter `;`, with no `;` anywhere in the code (conditional comments count as code);
+        - no `FOR UPDATE`, `FOR SHARE`, `LOCK IN SHARE MODE` or `INTO`. Locking clauses would block the application's writes for the whole export, and `INTO` writes a server file or a variable.
+    - The worker also runs `SET SESSION TRANSACTION READ ONLY` plus `START TRANSACTION READ ONLY`, and resets the session afterwards.
+    - **Cancel** sends `KILL QUERY` only for the owner's own export, only while it is running, and only to the connection id stored on that export (never one from the request). It runs as the same MySQL account.
+    - **Logging:** the audit log never stores a query's text. A failed query export is audited as "The query export failed." because MySQL errors quote the SQL. The statement is deleted from `export_jobs` when the file is deleted or expires.
+    - **Spreadsheet formulas:** CSV is exact, so cells starting with `=`, `+`, `-` or `@` are not escaped. The Export page tells users to open untrusted data with Data → From Text instead of double-clicking it.
+    - **Known limit:** a query still running in MySQL when its worker dies, or when recovery marks it interrupted, isn't killed; nobody holds credentials at that point. MySQL finishes it or the DBA kills it under Processes. The heartbeat lease is capped at 4 h.
 
 ## Web
 

@@ -32,6 +32,8 @@ import type {
 const props = defineProps<{
     databases?: ExportDatabase[];
     database: string | null;
+    table: string | null;
+    openExport: ExportJobStatus | null;
     exports: ExportJobStatus[];
 }>();
 
@@ -44,15 +46,19 @@ defineOptions({
 const POLL_MS = 2000;
 
 const source = ref(props.database ?? '');
-const scope = ref<'all' | 'selected'>('all');
+const scope = ref<'all' | 'selected'>(props.table ? 'selected' : 'all');
 const tables = ref<ExportTable[] | null>(null);
 const selected = ref<string[]>([]);
 const filter = ref('');
 const format = ref<ExportFormat>('sql.gz');
 const content = ref<ExportContent>('both');
 const includePrograms = ref(true);
+const csvTable = ref(props.table ?? '');
+const isCsv = computed(
+    () => format.value === 'csv' || format.value === 'csv.gz',
+);
 
-const job = ref<ExportJobStatus | null>(null);
+const job = ref<ExportJobStatus | null>(props.openExport);
 const history = ref<ExportJobStatus[]>(props.exports);
 
 const tablesHttp = useHttp<Record<string, never>, ExportTable[]>();
@@ -83,8 +89,13 @@ const canExport = computed(
     () =>
         source.value !== '' &&
         !createHttp.processing &&
-        (scope.value === 'all' || selected.value.length > 0),
+        (isCsv.value
+            ? csvTable.value !== ''
+            : scope.value === 'all' || selected.value.length > 0),
 );
+
+// Opened from a table page (?table=): preselect that table once its list has loaded.
+let pendingTable = props.table;
 
 watch(
     source,
@@ -92,6 +103,10 @@ watch(
         tables.value = null;
         selected.value = [];
         filter.value = '';
+
+        if (pendingTable === null) {
+            csvTable.value = '';
+        }
 
         if (name === '') {
             return;
@@ -102,6 +117,16 @@ watch(
 
             if (source.value === name) {
                 tables.value = loaded;
+
+                if (
+                    pendingTable !== null &&
+                    loaded.some((table) => table.name === pendingTable)
+                ) {
+                    selected.value = [pendingTable];
+                    csvTable.value = pendingTable;
+                }
+
+                pendingTable = null;
             }
         } catch (error) {
             toast.error(
@@ -130,7 +155,11 @@ function selectVisible(checked: boolean): void {
 async function startExport(): Promise<void> {
     createHttp.transform(() => ({
         database: source.value,
-        tables: scope.value === 'all' ? [] : selected.value,
+        tables: isCsv.value
+            ? [csvTable.value]
+            : scope.value === 'all'
+              ? []
+              : selected.value,
         format: format.value,
         content: content.value,
         includePrograms: includePrograms.value,
@@ -261,8 +290,10 @@ const selectClass =
             <h1 class="text-xl font-semibold tracking-tight">Export SQL</h1>
             <p class="text-sm text-muted-foreground">
                 Dump a database, or some of its tables, with
-                <code>mysqldump</code> in a consistent snapshot. The file names
-                no database, so it imports into any database.
+                <code>mysqldump</code> in a consistent snapshot (the file names
+                no database, so it imports into any database), or export one
+                table as CSV. To export a query's result, use "Export full
+                result" in the SQL editor.
             </p>
         </div>
 
@@ -291,35 +322,56 @@ const selectClass =
                     </select>
                 </label>
 
-                <div class="grid gap-1.5 text-sm">
+                <label class="grid gap-1.5 text-sm">
                     <span class="font-medium">Format</span>
-                    <div class="flex gap-4 pt-1.5">
-                        <label class="flex items-center gap-2">
-                            <input
-                                v-model="format"
-                                type="radio"
-                                value="sql.gz"
-                                data-test="export-format-gz"
-                            />
-                            <code>.sql.gz</code>
-                            <span class="text-xs text-muted-foreground"
-                                >(smaller)</span
-                            >
-                        </label>
-                        <label class="flex items-center gap-2">
-                            <input
-                                v-model="format"
-                                type="radio"
-                                value="sql"
-                                data-test="export-format-sql"
-                            />
-                            <code>.sql</code>
-                        </label>
-                    </div>
-                </div>
+                    <select
+                        v-model="format"
+                        :class="selectClass"
+                        data-test="export-format"
+                    >
+                        <optgroup label="SQL dump (re-importable)">
+                            <option value="sql.gz">.sql.gz — compressed</option>
+                            <option value="sql">.sql</option>
+                        </optgroup>
+                        <optgroup label="CSV (one table, for spreadsheets)">
+                            <option value="csv">.csv</option>
+                            <option value="csv.gz">.csv.gz — compressed</option>
+                        </optgroup>
+                    </select>
+                </label>
             </div>
 
-            <div v-if="source !== ''" class="grid gap-2 text-sm">
+            <label v-if="source !== '' && isCsv" class="grid gap-1.5 text-sm">
+                <span class="font-medium">Table</span>
+                <Skeleton v-if="tables === null" class="h-9 w-full" />
+                <select
+                    v-else
+                    v-model="csvTable"
+                    :class="selectClass"
+                    data-test="export-csv-table"
+                >
+                    <option value="" disabled>Choose a table…</option>
+                    <option
+                        v-for="table in tables"
+                        :key="table.name"
+                        :value="table.name"
+                    >
+                        {{ table.name
+                        }}{{ table.type === 'VIEW' ? ' (view)' : '' }}
+                    </option>
+                </select>
+                <span class="text-xs text-muted-foreground">
+                    UTF-8 with a header row. NULL is an empty field and text is
+                    always quoted, so empty text stays "". Binary values are
+                    written as hex (0x…). Values are written exactly as stored:
+                    if the data comes from untrusted users, open the file in a
+                    spreadsheet with Data → From Text rather than
+                    double-clicking it, since cells starting with = + - @ can
+                    run as formulas.
+                </span>
+            </label>
+
+            <div v-if="source !== '' && !isCsv" class="grid gap-2 text-sm">
                 <span class="font-medium">Tables</span>
                 <div class="flex gap-4">
                     <label class="flex items-center gap-2">
@@ -415,7 +467,7 @@ const selectClass =
                 </div>
             </div>
 
-            <div class="grid gap-4 sm:grid-cols-2">
+            <div v-if="!isCsv" class="grid gap-4 sm:grid-cols-2">
                 <label class="grid gap-1.5 text-sm">
                     <span class="font-medium">Content</span>
                     <select

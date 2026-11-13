@@ -125,3 +125,28 @@ test('a running query on another connection can be cancelled', function () {
 test('cancelling a connection that is gone reports that nothing was cancelled', function () {
     expect($this->queries->cancel(2_000_000_000))->toBeFalse();
 });
+
+test('in read-only mode a statement cannot smuggle a second one past the scanner (security review 7b)', function (string $sql) {
+    config(['dbnova.read_only' => true]);
+    $run = ($this->run)($sql);
+
+    expect($run->succeeded())->toBeFalse();
+    expect($this->connection->scalar("SELECT COUNT(*) FROM `{$this->database}`.numbers"))->toBe(50);
+})->with([
+    'conditional comment' => ['SELECT 1 /*!; SET SESSION TRANSACTION READ WRITE; DELETE FROM numbers # */'],
+    'DELIMITER block hiding a DELETE' => ["DELIMITER \$\$\nSELECT 1; DELETE FROM numbers\$\$"],
+]);
+
+test('a DELIMITER block hiding a DELETE does not bypass the destructive confirmation', function () {
+    $run = ($this->run)("DELIMITER \$\$\nSELECT 1; DELETE FROM numbers\$\$");
+
+    expect($run->succeeded())->toBeFalse();
+    expect($this->connection->scalar("SELECT COUNT(*) FROM `{$this->database}`.numbers"))->toBe(50);
+});
+
+test('stored procedures with multi-statement bodies still work with one statement per call', function () {
+    $run = ($this->run)("DELIMITER \$\$\nCREATE PROCEDURE twice() BEGIN SELECT 1; SELECT 2; END\$\$", ['confirmedDestructive' => true]);
+
+    expect($run->succeeded())->toBeTrue();
+    expect($this->connection->scalar('SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = ?', [$this->database]))->toBe(1);
+});

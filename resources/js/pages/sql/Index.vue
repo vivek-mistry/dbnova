@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { Head, useHttp, usePage } from '@inertiajs/vue3';
+import { Head, router, useHttp, usePage } from '@inertiajs/vue3';
 import {
     CircleAlert,
     CircleCheck,
     CircleMinus,
+    FileDown,
     Play,
     Square,
     Star,
@@ -32,9 +33,14 @@ import {
     run as runRoute,
     schema as schemaRoute,
 } from '@/routes/sql';
+import {
+    index as exportsIndex,
+    query as exportQueryRoute,
+} from '@/routes/exports';
 import { save as saveRoute } from '@/routes/sql/history';
 import type {
     DestructiveStatement,
+    ExportJobStatus,
     QueryHistoryItem,
     QueryRunResponse,
 } from '@/types';
@@ -78,6 +84,43 @@ const schemaHttp = useHttp<
     { tables: Record<string, string[]> }
 >();
 const saveHttp = useHttp<Record<string, never>, QueryHistoryItem>();
+const exportHttp = useHttp<Record<string, never>, ExportJobStatus>();
+
+/**
+ * Run the current statement again in a queued job and write every row
+ * (not just the capped preview) to a CSV file.
+ */
+async function exportFullResult(): Promise<void> {
+    if (current.value === null || result.value === null) {
+        return;
+    }
+
+    const statementSql = current.value.sql;
+    exportHttp.transform(() => ({
+        sql: statementSql,
+        database: result.value?.history.database ?? null,
+        format: 'csv',
+    }));
+
+    try {
+        const started = await exportHttp.post(exportQueryRoute.url());
+        toast.success('CSV export started', {
+            description:
+                'It runs in the background; download it when it is ready.',
+            action: {
+                label: 'View',
+                onClick: () =>
+                    router.visit(
+                        exportsIndex({ query: { export: started.id } }),
+                    ),
+            },
+        });
+    } catch (exception) {
+        toast.error(
+            httpErrorMessage(exception, 'The export could not be started.'),
+        );
+    }
+}
 
 const running = computed(() => runHttp.processing);
 const current = computed(
@@ -373,6 +416,18 @@ const selectClass =
                                 >
                             </template>
                             · {{ current.durationMs }} ms
+                            <Button
+                                v-if="current.rows"
+                                variant="link"
+                                size="sm"
+                                class="h-auto p-0 text-xs"
+                                :disabled="exportHttp.processing"
+                                data-test="export-full-result"
+                                @click="exportFullResult"
+                            >
+                                <FileDown class="size-3.5" /> Export full result
+                                (CSV)
+                            </Button>
                         </p>
                         <ul
                             v-if="current.warnings.length"

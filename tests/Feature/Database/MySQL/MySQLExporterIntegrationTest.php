@@ -3,6 +3,7 @@
 use App\Database\Adapters\MySQL\MySQLConnection;
 use App\Database\Adapters\MySQL\MySQLExporter;
 use App\Database\Adapters\MySQL\MySQLImporter;
+use App\Database\DTOs\Export\CsvExportRequest;
 use App\Database\DTOs\Export\ExportRequest;
 use App\Database\DTOs\Export\ExportResult;
 use App\Database\DTOs\Import\ImportRequest;
@@ -173,4 +174,127 @@ test('the size estimate comes from the catalog', function () {
 
     expect($estimate)->toBeGreaterThan(0)
         ->and(app(MySQLExporter::class)->estimateBytes($this->source, ['orders']))->toBeLessThanOrEqual($estimate);
+});
+
+describe('CSV', function () {
+    beforeEach(function () {
+        $this->csv = function (array $options = [], ?callable $onProgress = null, ?callable $onStart = null): ExportResult {
+            return app(MySQLExporter::class)->exportCsv(
+                new CsvExportRequest(
+                    $this->credentials,
+                    $options['path'] ?? $this->directory.'/out.csv',
+                    $options['format'] ?? ExportFormat::Csv,
+                    $options['database'] ?? $this->source,
+                    $options['table'] ?? null,
+                    $options['query'] ?? null,
+                ),
+                $onProgress ?? fn () => null,
+                $onStart,
+            );
+        };
+    });
+
+    test('a table is written as RFC 4180 CSV that keeps NULL, empty strings, quotes, newlines, unicode and binary apart', function () {
+        $result = ($this->csv)(['table' => 'customers']);
+
+        expect($result->succeeded)->toBeTrue()->and($result->rowsWritten)->toBe(3);
+        expect(file_get_contents($this->directory.'/out.csv'))->toBe(
+            "\"id\",\"name\",\"avatar\",\"note\"\r\n"
+            ."1,\"Ada; Lovelace\",\"0x00ff0a0d27\",\r\n"
+            ."2,\"O'Brien\",,\"line\nbreak\"\r\n"
+            ."3,\"Zoë 🚀\",\"\",\"-- not a comment; USE other;\"\r\n",
+        );
+    });
+
+    test('a read-only query from the SQL editor is exported with all its rows, gzip-compressed if asked', function () {
+        $result = ($this->csv)([
+            'query' => 'SELECT c.name, SUM(o.total) AS total FROM customers c JOIN orders o ON o.customer_id = c.id GROUP BY c.name ORDER BY c.name',
+            'format' => ExportFormat::CsvGz,
+            'path' => $this->directory.'/out.csv.gz',
+        ]);
+
+        expect($result->succeeded)->toBeTrue()->and($result->rowsWritten)->toBe(2);
+        expect(gzdecode((string) file_get_contents($this->directory.'/out.csv.gz')))
+            ->toBe("\"name\",\"total\"\r\n\"Ada; Lovelace\",\"13.75\"\r\n\"Zoë 🚀\",\"99.99\"\r\n");
+    });
+
+    test('only a single read-only query is accepted, and nothing is written for a refused one', function (string $query) {
+        expect(fn () => ($this->csv)(['query' => $query]))->toThrow(DatabaseOperationException::class);
+
+        expect(file_exists($this->directory.'/out.csv'))->toBeFalse()
+            ->and(($this->checksum)($this->source, 'orders'))->not->toBe('');
+        expect($this->connection->scalar("SELECT COUNT(*) FROM `{$this->source}`.orders"))->toBe(3);
+    })->with([
+        'write' => ['DELETE FROM orders'],
+        'two statements' => ['SELECT 1; DELETE FROM orders'],
+        'USE' => ['USE mysql'],
+    ]);
+
+    test('a query runs in a read-only session and transaction, and the session is reset afterwards', function () {
+        ($this->csv)(['query' => 'SELECT @@transaction_read_only AS ro, @@session.transaction_read_only AS session_ro']);
+
+        expect(file_get_contents($this->directory.'/out.csv'))->toBe("\"ro\",\"session_ro\"\r\n1,1\r\n");
+        expect(app(MySQLConnection::class)->scalar('SELECT @@session.transaction_read_only'))->toBe(0);
+    });
+
+    test('a query cannot smuggle writes past the single-statement check, or lock rows (security review 7b)', function (string $query) {
+        expect(fn () => ($this->csv)(['query' => $query]))->toThrow(DatabaseOperationException::class);
+
+        expect(file_exists($this->directory.'/out.csv'))->toBeFalse();
+        expect($this->connection->scalar("SELECT COUNT(*) FROM `{$this->source}`.orders"))->toBe(3);
+    })->with([
+        'DELIMITER block' => ["DELIMITER \$\$\nSELECT 1; COMMIT; DELETE FROM orders\$\$"],
+        'conditional comment' => ['SELECT 1 /*!; COMMIT; DELETE FROM orders # */'],
+        'FOR SHARE' => ['SELECT * FROM orders FOR SHARE'],
+        'LOCK IN SHARE MODE' => ['SELECT * FROM orders LOCK IN SHARE MODE'],
+        'INTO OUTFILE' => ["SELECT * FROM orders INTO OUTFILE '/tmp/x.csv'"],
+    ]);
+
+    test('even if the scanner were fooled, the connection runs only one statement per call', function () {
+        $pdo = app(MySQLConnection::class)->useCredentials($this->credentials)->pdo();
+
+        expect(fn () => $pdo->query("SELECT 1; DELETE FROM `{$this->source}`.orders"))->toThrow(PDOException::class);
+        expect($this->connection->scalar("SELECT COUNT(*) FROM `{$this->source}`.orders"))->toBe(3);
+    });
+
+    test('a missing table is reported and leaves no file', function () {
+        expect(fn () => ($this->csv)(['table' => 'nope']))->toThrow(DatabaseOperationException::class, 'nope');
+
+        expect(file_exists($this->directory.'/out.csv'))->toBeFalse();
+    });
+
+    test('the connection id is handed over before the query runs, and a cancel removes the partial file', function () {
+        $connectionId = null;
+        $cancelled = false;
+
+        try {
+            ($this->csv)(
+                ['table' => 'customers'],
+                function () use (&$connectionId) {
+                    if ($connectionId !== null) {
+                        throw new ExportCancelledException;
+                    }
+                },
+                function (int $id) use (&$connectionId) {
+                    $connectionId = $id;
+                },
+            );
+        } catch (ExportCancelledException) {
+            $cancelled = true;
+        }
+
+        expect($cancelled)->toBeTrue()
+            ->and($connectionId)->toBeInt()->toBeGreaterThan(0)
+            ->and(file_exists($this->directory.'/out.csv'))->toBeFalse();
+    });
+
+    test('a query MySQL stops mid-run (a KILL QUERY from Cancel, a timeout) fails and leaves no file', function () {
+        $query = 'SELECT /*+ MAX_EXECUTION_TIME(300) */ COUNT(*) FROM information_schema.COLUMNS a, information_schema.COLUMNS b, information_schema.COLUMNS c';
+
+        expect(fn () => ($this->csv)(['query' => $query]))->toThrow(DatabaseOperationException::class);
+        expect(file_exists($this->directory.'/out.csv'))->toBeFalse();
+
+        // The connection is usable again afterwards.
+        expect(($this->csv)(['table' => 'orders', 'path' => $this->directory.'/after.csv'])->rowsWritten)->toBe(3);
+    });
 });

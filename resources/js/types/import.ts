@@ -77,14 +77,18 @@ export type ExportStatus =
     | 'interrupted'
     | 'expired';
 
-export type ExportFormat = 'sql' | 'sql.gz';
+export type ExportFormat = 'sql' | 'sql.gz' | 'csv' | 'csv.gz';
+
+export type ExportSource = 'database' | 'tables' | 'table' | 'query';
 
 export type ExportContent = 'both' | 'structure' | 'data';
 
 export type ExportJobStatus = {
     id: string;
-    database: string;
+    database: string | null;
     tables: string[] | null;
+    source: ExportSource;
+    query: string | null;
     format: ExportFormat;
     options: { content?: ExportContent; includePrograms?: boolean };
     status: ExportStatus;
@@ -92,6 +96,7 @@ export type ExportJobStatus = {
     estimatedBytes: number;
     bytesWritten: number;
     fileBytes: number;
+    rowsWritten: number;
     lastError: string | null;
     cancelRequested: boolean;
     downloadUrl: string | null;
