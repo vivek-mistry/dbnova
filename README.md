@@ -126,19 +126,20 @@ Production setup (nginx, supervisor, PHP limits) is described in [`.claude/docs/
 
 ### Settings (`.env`)
 
-| Setting                                                   | Default                  | What it does                                                                     |
-| --------------------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------- |
-| `DBNOVA_DB_HOST` / `DBNOVA_DB_PORT` / `DBNOVA_DB_SOCKET`  | `127.0.0.1` / `3306` / – | Where the managed MySQL server is. A socket path takes precedence over TCP.      |
-| `DBNOVA_MYSQL_BIN` / `DBNOVA_MYSQLDUMP_BIN`               | `/usr/bin/…`             | Full paths to the client tools. Required for imports and exports.                |
-| `DBNOVA_READ_ONLY`                                        | `false`                  | Refuse every change to the server. Browsing, `SELECT` and exports still work.    |
-| `DBNOVA_PAGE_SIZE` / `DBNOVA_MAX_PAGE_SIZE`               | `100` / `1000`           | Rows per page in the table browser: the default, and the most a user may choose. |
-| `DBNOVA_QUERY_ROW_CAP` / `DBNOVA_MAX_QUERY_ROW_CAP`       | `1000` / `10000`         | Rows the SQL editor shows. Use the CSV export for full results.                  |
-| `DBNOVA_QUERY_TIMEOUT_MS` / `DBNOVA_MAX_QUERY_TIMEOUT_MS` | `30000` / `300000`       | MySQL stops a `SELECT` after this long (`max_execution_time`).                   |
-| `DBNOVA_MAX_UPLOAD_BYTES`                                 | 100 GB                   | Largest import file.                                                             |
-| `DBNOVA_MIN_FREE_DISK_BYTES`                              | 5 GB                     | Free disk that imports and exports must leave.                                   |
-| `DBNOVA_EXPORT_FILE_HOURS` / `DBNOVA_EXPORT_LINK_MINUTES` | `24` / `60`              | How long export files are kept, and how long a download link works.              |
-| `DBNOVA_MAX_KEPT_EXPORTS`                                 | `10`                     | Finished export files one user may keep at once (`0` = no limit).                |
-| `DBNOVA_TEST_DB_USERNAME` / `…_PASSWORD`                  | –                        | Optional test account for the integration tests.                                 |
+| Setting                                                   | Default                  | What it does                                                                                  |
+| --------------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------- |
+| `DBNOVA_DB_HOST` / `DBNOVA_DB_PORT` / `DBNOVA_DB_SOCKET`  | `127.0.0.1` / `3306` / – | Where the managed MySQL server is. A socket path takes precedence over TCP.                   |
+| `DBNOVA_MYSQL_BIN` / `DBNOVA_MYSQLDUMP_BIN`               | `/usr/bin/…`             | Full paths to the client tools. Required for imports and exports.                             |
+| `DBNOVA_READ_ONLY`                                        | `false`                  | Refuse every change to the server. Browsing, `SELECT` and exports still work.                 |
+| `DBNOVA_PAGE_SIZE` / `DBNOVA_MAX_PAGE_SIZE`               | `100` / `1000`           | Rows per page in the table browser: the default, and the most a user may choose.              |
+| `DBNOVA_QUERY_ROW_CAP` / `DBNOVA_MAX_QUERY_ROW_CAP`       | `1000` / `10000`         | Rows the SQL editor shows. Use the CSV export for full results.                               |
+| `DBNOVA_QUERY_TIMEOUT_MS` / `DBNOVA_MAX_QUERY_TIMEOUT_MS` | `30000` / `300000`       | MySQL stops a `SELECT` after this long (`max_execution_time`).                                |
+| `DBNOVA_WORK_DIR`                                         | `storage/app/dbnova`     | Where uploads, export files and temp files go. Point it at a volume with room for your dumps. |
+| `DBNOVA_MAX_UPLOAD_BYTES`                                 | 100 GB                   | Largest import file.                                                                          |
+| `DBNOVA_MIN_FREE_DISK_BYTES`                              | 5 GB                     | Free disk that imports and exports must leave.                                                |
+| `DBNOVA_EXPORT_FILE_HOURS` / `DBNOVA_EXPORT_LINK_MINUTES` | `24` / `60`              | How long export files are kept, and how long a download link works.                           |
+| `DBNOVA_MAX_KEPT_EXPORTS`                                 | `10`                     | Finished export files one user may keep at once (`0` = no limit).                             |
+| `DBNOVA_TEST_DB_USERNAME` / `…_PASSWORD`                  | –                        | Optional test account for the integration tests.                                              |
 
 Each user can lower or raise the page size, row cap and query timeout for their own account under **Settings → Preferences**, up to the maximums above. Imports and exports always use the `.env` values. All settings, with comments, are in [`.env.example`](.env.example) and [`config/dbnova.php`](config/dbnova.php).
 

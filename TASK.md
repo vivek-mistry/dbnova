@@ -2,13 +2,13 @@
 
 **Current phase:** Phase 9 — Hardening & stress testing
 **Phase file:** [.claude/phases/phase-09-hardening.md](.claude/phases/phase-09-hardening.md)
-**Status:** In progress (security fixes awaiting review)
+**Status:** Review (Phase 9 done)
 **Branch:** `phase/00-architecture` (all phases so far)
 
 ## Now
 
-- Review the Phase 9 security fixes (uncommitted)
-- Next: identifier and upload fuzz tests, recovery drills (throwaway mysqld, RAM disk), benchmarks on this Mac, PHPStan level 8
+- Review Phase 9 (fuzzing, drills, benchmarks, PHPStan 8, grid column virtualization)
+- Then Phase 10: release, Docker Compose, install guide
 
 ## Done
 

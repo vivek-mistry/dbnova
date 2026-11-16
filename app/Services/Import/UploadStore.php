@@ -121,10 +121,19 @@ class UploadStore
         try {
             fseek($output, $index * $upload->chunk_size);
             // Never write past this chunk's range; extra bytes are detected below without being written.
-            $copied = stream_copy_to_stream($input, $output, $expected);
-            fflush($output);
+            // On a full disk these warn (ENOSPC); the counts below report it instead.
+            $copied = @stream_copy_to_stream($input, $output, $expected);
+            $flushed = @fflush($output);
         } finally {
             fclose($output);
+        }
+
+        // The request still had data but the file took less: the disk is full (or failing).
+        if (($copied === false || $copied < $expected || ! $flushed) && ! feof($input)) {
+            throw new DiskFullException(sprintf(
+                "The server's disk is full: chunk %d could not be saved. Free some space (for example delete finished exports), then resume the upload.",
+                $index,
+            ));
         }
 
         $oversized = ! feof($input) && fread($input, 1) !== '';

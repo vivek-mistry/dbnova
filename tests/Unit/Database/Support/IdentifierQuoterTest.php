@@ -21,3 +21,16 @@ test('invalid identifiers are rejected', function (string $identifier, string $m
     'NUL byte' => ["shop\0", 'Names cannot contain NUL characters.'],
     'too long' => [str_repeat('a', 65), 'Names cannot be longer than 64 characters.'],
 ]);
+
+test('names MySQL could never have are refused', function (string $name) {
+    expect(fn () => (new IdentifierQuoter)->quote($name))->toThrow(InvalidIdentifierException::class)
+        ->and(IdentifierQuoter::isValid($name))->toBeFalse();
+})->with([
+    'emoji (outside the BMP)' => ['orders_😀'],
+    'trailing space' => ['orders '],
+    'invalid UTF-8' => ["orders\xff"],
+]);
+
+test('BMP unicode, leading spaces and backticks stay valid', function (string $name) {
+    expect(IdentifierQuoter::isValid($name))->toBeTrue();
+})->with([['Bestellungen_ü'], ['注文'], [' leading'], ['a`b']]);

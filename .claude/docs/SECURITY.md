@@ -31,7 +31,7 @@ DBNova is effectively a superuser console for a MySQL server. Its threat model a
 ## Injection
 
 - **SQL values** are always bound parameters through PDO with native prepares.
-- **SQL identifiers** go through `IdentifierQuoter` only: backtick-quoted, backticks doubled, NUL rejected, length ≤ 64. Where possible, identifiers are checked against the actual catalog (`information_schema`) first.
+- **SQL identifiers** go through `IdentifierQuoter` only: backtick-quoted, backticks doubled, and NUL, invalid UTF-8, characters outside the BMP (emoji), a trailing space and length > 64 are rejected. `EnsureValidRouteNames` returns 404 for such `{database}`/`{table}` route parameters before any lookup (Phase 9 fuzzing found 503s on emoji and trailing-space names). `IdentifierFuzzTest` replays 16 hostile names against 15 endpoints on real MySQL with a canary database. Where possible, identifiers are checked against the actual catalog (`information_schema`) first.
 - **Shell:** arrays only for Symfony Process. No `fromShellCommandline`, `exec` or `shell_exec`. Binary paths come from config and are validated as executable files.
 - **The SQL editor** runs arbitrary SQL by design. It's protected by auth, the audit log, read-only mode and CSRF.
 

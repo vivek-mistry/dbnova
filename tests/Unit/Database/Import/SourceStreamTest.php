@@ -132,6 +132,9 @@ test('unsafe or ambiguous zip archives are refused', function (array $entries, s
     'path traversal' => [['../../etc/evil.sql' => 'SELECT 1;'], 'unsafe path'],
     'nested traversal' => [['dumps/../../evil.sql' => 'SELECT 1;'], 'unsafe path'],
     'absolute path' => [['/tmp/evil.sql' => 'SELECT 1;'], 'unsafe path'],
+    'windows drive path' => [['C:/evil.sql' => 'SELECT 1;'], 'unsafe path'],
+    'backslash traversal' => [['dumps\\..\\..\\evil.sql' => 'SELECT 1;'], 'unsafe path'],
+    'leading backslash' => [['\\evil.sql' => 'SELECT 1;'], 'unsafe path'],
     'two sql files' => [['a.sql' => 'SELECT 1;', 'b.sql' => 'SELECT 2;'], 'exactly one .sql file'],
     'no sql file' => [['readme.txt' => 'hello'], 'exactly one .sql file'],
     'empty archive' => [[], 'exactly one .sql file'],
@@ -167,4 +170,39 @@ test('a file that is not a zip archive is refused', function () {
 
 test('a missing file is reported', function () {
     expect(fn () => SourceStream::open($this->directory.'/gone.sql', 'sql'))->toThrow(SourceException::class, 'no longer on disk');
+});
+
+test('a password-protected zip is refused', function () {
+    $zip = new ZipArchive;
+    $zip->open($path = $this->directory.'/locked.zip', ZipArchive::CREATE | ZipArchive::OVERWRITE);
+    $zip->addFromString('dump.sql', 'SELECT 1;');
+
+    if (! $zip->setEncryptionName('dump.sql', ZipArchive::EM_AES_256, 'secret')) {
+        $this->markTestSkipped('This libzip cannot write encrypted entries.');
+    }
+
+    $zip->close();
+
+    expect(fn () => SourceStream::open($path, 'zip'))->toThrow(SourceException::class, 'password-protected');
+});
+
+test('a zip bomb is streamed with bounded memory, never extracted', function () {
+    // 64 MB of one repeated line deflates to well under 1 MB.
+    $line = "INSERT INTO t VALUES (1,'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');\n";
+    makeZip($path = $this->directory.'/bomb.zip', ['dump.sql' => str_repeat($line, intdiv(64 * 1024 * 1024, strlen($line)))]);
+    expect(filesize($path))->toBeLessThan(1024 * 1024);
+
+    $source = SourceStream::open($path, 'zip');
+    $before = memory_get_usage();
+    $peak = 0;
+    $total = 0;
+
+    while (($data = $source->read(1024 * 1024)) !== '') {
+        $total += strlen($data);
+        $peak = max($peak, memory_get_usage() - $before);
+    }
+
+    expect($total)->toBeGreaterThan(60 * 1024 * 1024)
+        ->and($peak)->toBeLessThan(24 * 1024 * 1024)
+        ->and(glob($this->directory.'/*'))->toBe([$path]);
 });

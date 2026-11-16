@@ -91,10 +91,53 @@ const rowVirtualizer = useVirtualizer(
 );
 
 const virtualRows = computed(() => rowVirtualizer.value.getVirtualItems());
+
+/*
+ * Columns are virtualized too: a wide table (100+ columns) would otherwise render
+ * every cell of every visible row, which made vertical scrolling drop to ~20 fps.
+ * A spacer keeps the visible cells at their real offset.
+ */
+const headers = computed(() => dataTable.getHeaderGroups()[0]?.headers ?? []);
+const gutter = computed(() => (props.editable ? GUTTER_WIDTH : 0));
+
+const columnVirtualizer = useVirtualizer(
+    computed(() => ({
+        horizontal: true,
+        count: headers.value.length,
+        getScrollElement: () => scrollElement.value,
+        estimateSize: (index: number) => headers.value[index]?.getSize() ?? 180,
+        overscan: 4,
+        scrollMargin: gutter.value,
+    })),
+);
+
+const virtualColumns = computed(() =>
+    columnVirtualizer.value.getVirtualItems(),
+);
+const leftSpacer = computed(
+    () => (virtualColumns.value[0]?.start ?? gutter.value) - gutter.value,
+);
 const totalHeight = computed(() => rowVirtualizer.value.getTotalSize());
 const totalWidth = computed(
     () => dataTable.getTotalSize() + (props.editable ? GUTTER_WIDTH : 0),
 );
+
+// Re-measure the columns after a resize.
+watch(
+    () => dataTable.getTotalSize(),
+    () => columnVirtualizer.value.measure(),
+);
+
+function visibleCells(rowIndex: number) {
+    const cells = tableRows.value[rowIndex]?.getAllCells() ?? [];
+
+    return virtualColumns.value
+        .filter((column) => cells[column.index] !== undefined)
+        .map((column) => ({
+            cell: cells[column.index]!,
+            columnIndex: column.index,
+        }));
+}
 
 /* Selection */
 
@@ -296,8 +339,14 @@ function startResize(handler: (event: unknown) => void, event: Event): void {
                         />
                     </div>
                     <div
-                        v-for="header in dataTable.getHeaderGroups()[0]
-                            ?.headers ?? []"
+                        class="shrink-0"
+                        :style="{ width: `${leftSpacer}px` }"
+                        aria-hidden="true"
+                    />
+                    <div
+                        v-for="header in virtualColumns.map(
+                            (column) => headers[column.index]!,
+                        )"
                         :key="header.id"
                         class="relative flex shrink-0 cursor-pointer items-center gap-1 border-r px-2 py-1.5 select-none hover:bg-muted-foreground/10"
                         :style="{ width: `${header.getSize()}px` }"
@@ -374,9 +423,14 @@ function startResize(handler: (event: unknown) => void, event: Event): void {
                             />
                         </div>
                         <div
-                            v-for="(cell, columnIndex) in tableRows[
-                                virtualRow.index
-                            ]?.getAllCells() ?? []"
+                            class="shrink-0"
+                            :style="{ width: `${leftSpacer}px` }"
+                            aria-hidden="true"
+                        />
+                        <div
+                            v-for="{ cell, columnIndex } in visibleCells(
+                                virtualRow.index,
+                            )"
                             :key="cell.id"
                             class="flex shrink-0 items-center overflow-hidden border-r px-2"
                             :class="{

@@ -1,5 +1,8 @@
 <?php
 
+// An empty DBNOVA_WORK_DIR= in .env means the default, never the filesystem root.
+$workDirectory = rtrim((string) (env('DBNOVA_WORK_DIR') ?: storage_path('app/dbnova')), '/');
+
 return [
 
     /*
@@ -43,11 +46,12 @@ return [
     |--------------------------------------------------------------------------
     */
 
+    // DBNOVA_WORK_DIR moves uploads, export files and temp files (e.g. to a bigger volume).
     'paths' => [
-        'uploads' => storage_path('app/dbnova/uploads'),
-        'imports' => storage_path('app/dbnova/imports'),
-        'exports' => storage_path('app/dbnova/exports'),
-        'tmp' => storage_path('app/dbnova/tmp'),
+        'uploads' => $workDirectory.'/uploads',
+        'imports' => $workDirectory.'/imports',
+        'exports' => $workDirectory.'/exports',
+        'tmp' => $workDirectory.'/tmp',
     ],
 
     /*

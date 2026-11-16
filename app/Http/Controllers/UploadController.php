@@ -6,6 +6,7 @@ use App\Enums\ImportStatus;
 use App\Models\ImportJob;
 use App\Models\Upload;
 use App\Models\User;
+use App\Services\Import\DiskFullException;
 use App\Services\Import\UploadException;
 use App\Services\Import\UploadStore;
 use Illuminate\Http\JsonResponse;
@@ -60,6 +61,9 @@ class UploadController extends Controller
 
         try {
             $this->store->writeChunk($upload, $index, $body);
+        } catch (DiskFullException $exception) {
+            // 507 Insufficient Storage: the uploader stops retrying and shows the message.
+            return response()->json(['message' => $exception->getMessage(), 'diskFull' => true], 507);
         } catch (UploadException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);
         }

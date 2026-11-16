@@ -167,3 +167,45 @@ test('uploads need a signed-in user', function () {
 
     $this->postJson(route('uploads.store'), ['name' => 'shop.sql', 'size' => 10])->assertUnauthorized();
 });
+
+test('hostile file names are metadata only: the file lands under a UUID path', function (string $name) {
+    $response = $this->post(route('uploads.store'), ['name' => $name, 'size' => 10], ['Accept' => 'application/json']);
+
+    expect($response->status())->toBeLessThan(500);
+
+    if ($response->status() !== 201) {
+        return; // Refused, e.g. not a .sql file.
+    }
+
+    $upload = Upload::query()->sole();
+    $path = $upload->path();
+
+    expect($path)->toStartWith($this->directory.'/')
+        ->and(basename(dirname($path)).basename($path))->not->toContain('..')
+        ->and($path)->not->toContain('evil');
+})->with([
+    'traversal' => ['../../../../tmp/evil.sql'],
+    'absolute' => ['/etc/evil.sql'],
+    'windows traversal' => ['..\\..\\evil.sql'],
+    'NUL byte' => ["evil.sql\0.txt"],
+    'very long' => [str_repeat('a', 5000).'.sql'],
+    'only an extension' => ['.sql'],
+    'unicode' => ['dump_😀_ümlaut.sql'],
+    'invalid UTF-8' => ["dump\xff.sql"],
+]);
+
+test('a chunk cut off by a dropped connection is not recorded, and resending it restores the exact file', function () {
+    $contents = random_bytes(2500);
+    $upload = $this->postJson(route('uploads.store'), ['name' => 'shop.sql', 'size' => 2500])->json();
+
+    ($this->putChunk)($upload['id'], 0, substr($contents, 0, 1024))->assertOk();
+    // The network drops 300 bytes into chunk 1: the server sees a short body.
+    ($this->putChunk)($upload['id'], 1, substr($contents, 1024, 300))->assertUnprocessable();
+    $this->getJson(route('uploads.show', $upload['id']))->assertJson(['received' => [0]]);
+
+    // The browser reconnects, asks what arrived, and sends the rest.
+    ($this->putChunk)($upload['id'], 1, substr($contents, 1024, 1024))->assertOk();
+    ($this->putChunk)($upload['id'], 2, substr($contents, 2048))->assertOk()->assertJson(['status' => 'uploaded']);
+
+    expect(file_get_contents(Upload::query()->findOrFail($upload['id'])->path()))->toBe($contents);
+});

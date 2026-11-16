@@ -3,6 +3,7 @@
 namespace App\Rules;
 
 use App\Database\Adapters\MySQL\MySQLSchemaManager;
+use App\Database\Support\IdentifierQuoter;
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Translation\PotentiallyTranslatedString;
@@ -37,6 +38,10 @@ class DatabaseName implements ValidationRule
 
         if (str_ends_with($value, ' ')) {
             $fail('The :attribute cannot end with a space.');
+        }
+
+        if (! mb_check_encoding($value, 'UTF-8') || IdentifierQuoter::outsideBmp($value)) {
+            $fail('The :attribute cannot contain emoji or other characters MySQL does not allow in names.');
         }
 
         if (in_array(strtolower($value), MySQLSchemaManager::SYSTEM_DATABASES, true)) {

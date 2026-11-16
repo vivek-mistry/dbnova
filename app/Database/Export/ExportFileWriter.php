@@ -84,6 +84,10 @@ final class ExportFileWriter
             $this->put((string) deflate_add($this->deflate, '', ZLIB_FINISH));
         }
 
+        if (@fflush($this->handle) === false) {
+            throw new DatabaseOperationException('Writing the export file failed: the server\'s disk is full. The partial file was deleted.');
+        }
+
         fclose($this->handle);
     }
 
@@ -108,10 +112,11 @@ final class ExportFileWriter
             return;
         }
 
-        $written = fwrite($this->handle, $data);
+        // On a full disk fwrite warns (ENOSPC); the short count below turns it into a clean failure that deletes the file.
+        $written = @fwrite($this->handle, $data);
 
         if ($written !== strlen($data)) {
-            throw new DatabaseOperationException('Writing the export file failed. The disk may be full.');
+            throw new DatabaseOperationException('Writing the export file failed: the server\'s disk is full (or the file could not be written). The partial file was deleted.');
         }
 
         $this->fileBytes += $written;

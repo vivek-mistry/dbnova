@@ -89,7 +89,9 @@ async function request<T>(
         const error = new UploadFailed(message);
         // Retry only what may succeed later: server errors and rate limits.
         (error as UploadFailed & { retryable: boolean }).retryable =
-            response.status >= 500 || response.status === 429;
+            // 507: the server's disk is full; retrying won't help until space is freed.
+            (response.status >= 500 && response.status !== 507) ||
+            response.status === 429;
 
         throw error;
     }

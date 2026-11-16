@@ -17,11 +17,12 @@ use App\Http\Controllers\TableController;
 use App\Http\Controllers\TableRowsController;
 use App\Http\Controllers\UploadController;
 use App\Http\Middleware\EnsureMySQLCredentials;
+use App\Http\Middleware\EnsureValidRouteNames;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard')->name('home');
 
-Route::middleware(['auth', EnsureMySQLCredentials::class])->group(function () {
+Route::middleware(['auth', EnsureMySQLCredentials::class, EnsureValidRouteNames::class])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
 
     Route::resource('databases', DatabaseController::class)
