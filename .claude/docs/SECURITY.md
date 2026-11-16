@@ -70,6 +70,12 @@ DBNova is effectively a superuser console for a MySQL server. Its threat model a
     - **Spreadsheet formulas:** CSV is exact, so cells starting with `=`, `+`, `-` or `@` are not escaped. The Export page tells users to open untrusted data with Data → From Text instead of double-clicking it.
     - **Known limit:** a query still running in MySQL when its worker dies, or when recovery marks it interrupted, isn't killed; nobody holds credentials at that point. MySQL finishes it or the DBA kills it under Processes. The heartbeat lease is capped at 4 h.
 
+## Server processes (Phase 8a)
+
+- MySQL decides which threads are listed and killable. Without PROCESS, an account sees only its own threads, and without CONNECTION_ADMIN or SUPER it can only kill its own. DBNova adds nothing on top.
+- Kill needs a confirmation (`confirm: true`, enforced on the server), is throttled (30/min), is blocked by read-only mode **in the adapter**, refuses DBNova's own connection, and is audited (`process.kill-query` / `process.kill`) with the target's id, user, command and time. The SQL is not stored.
+- The id is validated as a number in the route and cast to int before `KILL`, which takes no placeholders.
+
 ## Web
 
 - CSRF on all state-changing requests (Laravel default, including chunk PUTs).

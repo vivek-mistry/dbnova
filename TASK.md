@@ -1,16 +1,14 @@
 # DBNova — Current Task
 
-**Current phase:** Phase 7 — Export engine (7a committed; 7b built, awaiting review)
-**Phase file:** [.claude/phases/phase-07-export.md](.claude/phases/phase-07-export.md)
-**Status:** Review (7b)
+**Current phase:** Phase 8 — Monitoring & advanced operations (8a built, awaiting review; 8b next)
+**Phase file:** [.claude/phases/phase-08-monitoring.md](.claude/phases/phase-08-monitoring.md)
+**Status:** Review (8a)
 **Branch:** `phase/00-architecture` (all phases so far)
 
 ## Now
 
-- User review of 7a in the browser (needs `php artisan queue:work --queue=imports,exports,default` and `php artisan schedule:work`, plus `DBNOVA_MYSQL_BIN` / `DBNOVA_MYSQLDUMP_BIN` in `.env`):
-  Import / Export → Export tab → database → all or chosen tables → format → Export → Download. Try: Cancel mid-way, Delete file, re-import the download on the Import tab
-- Review 7b in the browser: a table's Export tab → CSV → Download; SQL editor → run a SELECT → "Export full result (CSV)" → View; Cancel a slow query export
-- Then close Phase 7 (`/phase-done 7`) → Phase 8 (monitoring)
+- Review 8a in the browser: Dashboard (live charts fill in over a minute), Processes (filter, idle toggle, Pause, Stop query / Kill connection on a test query such as `SELECT SLEEP(60)` from another client), Variables and Status tabs
+- Then 8b: table maintenance, data vs index size breakdown, audit log viewer, per-user settings
 
 ## Done
 
@@ -21,6 +19,7 @@
 - Phase 4 — Schema management (online-first ALTERs, SQL preview, create/alter/drop)
 - Phase 5 — SQL editor (CodeMirror, multi-statement runs, row cap, cancel, history/saved queries)
 - Phase 6 — Large import engine (chunked resumable uploads, streaming preflight, queued import with cancel/recovery; 2 GB in 117 s, flat memory)
+- Phase 7 — Export engine (SQL dumps and CSV; one statement per connection call after security review 7b)
 
 ## Test environment (local MySQL)
 
@@ -30,7 +29,7 @@
 
 ## Blocked / waiting on user
 
-- Approve the 7b commit (closes Phase 7)
+- Approve the 8a commit
 - Optional: an opt-in "safe for spreadsheets" CSV mode (escapes = + - @), yes or no
 
 - Decide on LOW-2: a cap on completed exports kept per user (e.g. 10 files or N GB), or leave as is

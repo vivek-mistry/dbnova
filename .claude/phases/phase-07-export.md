@@ -1,6 +1,6 @@
 # Phase 7 — Export engine
 
-**Status:** review (7a committed; 7b built, awaiting review)
+**Status:** done (7a 6c2b43b, 7b f24892a)
 **Goal:** Export databases and tables to SQL / SQL.GZ and tables or query results to CSV, without exhausting memory.
 **New dependencies:** none.
 **Read first:** `docs/IMPORT_EXPORT_ENGINE.md` (Export section).

@@ -46,4 +46,7 @@ Append entries during and at the end of each phase. Use the format `Phase N — 
 - Phase 7 — `KILL QUERY` on a `SELECT SLEEP(n)` makes it return 1 instead of failing, so it can't simulate a cancelled query. A `/*+ MAX_EXECUTION_TIME(ms) */` hint on a heavy cross join gives a real mid-query error. — Use that in tests.
 - Phase 7 — Never `pcntl_fork()` inside a test that holds an open PDO connection. The child's exit tears down shared state, and its `afterEach` never runs, so it leaves `dbnova_test_*` databases behind. — Simulate from one process instead.
 - Phase 7 — Pest has no `->before()` on a test. — Put the setup in the test body or a `beforeEach`.
+- Phase 8 — `Threads_running` counts MySQL's background threads (e.g. the event scheduler) but `Threads_connected` doesn't, so "running" can exceed "connected". — Label both series honestly and explain it on the chart.
+- Phase 8 — A running prepared statement shows `Command = Execute`, not `Query`, in the process list. Both are "running a statement". — Offer Stop query for either.
+- Phase 8 — A new Inertia page fails page tests with "Not a valid Inertia response" (actually a 500: "Unable to locate file in Vite manifest") until the frontend is rebuilt. — Run `npm run build` after adding a page, before running its tests.
 - Phase 0 — `mysql` on PATH is a shell alias. — Always resolve binaries from config, never from `PATH` lookups that rely on the interactive shell.

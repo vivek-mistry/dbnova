@@ -11,8 +11,8 @@ Status values: `not started` · `in progress` · `review` · `done`. Only **one*
 | 4   | Schema management                         | done        | [phase-04-schema.md](phase-04-schema.md)                     |
 | 5   | SQL editor                                | done        | [phase-05-sql-editor.md](phase-05-sql-editor.md)             |
 | 6   | Large import engine                       | done        | [phase-06-import.md](phase-06-import.md)                     |
-| 7   | Export engine                             | in progress | [phase-07-export.md](phase-07-export.md)                     |
-| 8   | Monitoring & advanced operations          | not started | [phase-08-monitoring.md](phase-08-monitoring.md)             |
+| 7   | Export engine                             | done        | [phase-07-export.md](phase-07-export.md)                     |
+| 8   | Monitoring & advanced operations          | in progress | [phase-08-monitoring.md](phase-08-monitoring.md)             |
 | 9   | Hardening & stress testing                | not started | [phase-09-hardening.md](phase-09-hardening.md)               |
 | 10  | Release & self-hosted install             | not started | [phase-10-release.md](phase-10-release.md)                   |
 
@@ -22,7 +22,7 @@ Status values: `not started` · `in progress` · `review` · `done`. Only **one*
 | ----- | ------------------------------------------------------------------------------------ | ----------------------------------- |
 | 3 ✅  | `@tanstack/vue-table@^9.3.1`, `@tanstack/vue-virtual@^3.13.50` (approved, installed) | Data grid + virtualization          |
 | 5 ✅  | `codemirror@^6.0.2`, `@codemirror/lang-sql@^6.10.0` (approved, installed)            | SQL editor                          |
-| 8     | `apexcharts`, `vue3-apexcharts`                                                      | Dashboard charts                    |
+| 8 ✖   | `apexcharts`, `vue3-apexcharts` (declined: hand-built SVG charts instead)            | Dashboard charts                    |
 | —     | `predis/predis` (optional)                                                           | Only if Redis queue is chosen later |
 
 ## Workflow
