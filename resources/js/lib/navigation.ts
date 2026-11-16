@@ -3,10 +3,12 @@ import {
     ArrowDownUp,
     Database,
     HeartPulse,
+    ScrollText,
     LayoutGrid,
     SquareTerminal,
 } from '@lucide/vue';
 import { dashboard } from '@/routes';
+import { index as auditIndex } from '@/routes/audit';
 import { index as databasesIndex } from '@/routes/databases';
 import { index as importExportIndex } from '@/routes/import-export';
 import { index as processesIndex } from '@/routes/processes';
@@ -39,6 +41,11 @@ export const mainNavItems: NavItem[] = [
         title: 'Processes',
         href: processesIndex(),
         icon: Activity,
+    },
+    {
+        title: 'Audit log',
+        href: auditIndex(),
+        icon: ScrollText,
     },
     {
         title: 'System',

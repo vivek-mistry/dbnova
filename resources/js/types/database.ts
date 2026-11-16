@@ -21,6 +21,21 @@ export type TableInfo = {
     approximateRows: number | null;
     sizeBytes: number | null;
     collation: string | null;
+    /** Rows (for InnoDB, the clustered primary key). */
+    dataBytes: number | null;
+    /** Secondary indexes. */
+    indexBytes: number | null;
+    /** Allocated but unused space (DATA_FREE); InnoDB keeps a few MB free per table. */
+    freeBytes: number | null;
+};
+
+export type MaintenanceOperation = 'optimize' | 'analyze' | 'check' | 'repair';
+
+export type MaintenanceResult = {
+    table: string;
+    operation: string;
+    type: string;
+    message: string;
 };
 
 export type CollationInfo = {

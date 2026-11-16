@@ -6,7 +6,7 @@ A self-hosted MySQL manager: a faster, more trustworthy alternative to phpMyAdmi
 
 DBNova manages **one MySQL server** running on the same machine or VPS. You sign in with a MySQL account, and that account's grants decide what you can do. It's built for everyday browsing and for importing and exporting production-sized databases (10 GB and more) without running out of memory.
 
-> **Status:** in active development. Phases 0–7 (through the import and export engines) are done. Next up: monitoring, then hardening and a release with Docker support. See [Roadmap](#roadmap).
+> **Status:** in active development. Phases 0–7 (through the import and export engines) are done, and monitoring (Phase 8) is in review. Next up: hardening and a release with Docker support. See [Roadmap](#roadmap).
 
 ## Features
 
@@ -29,7 +29,12 @@ DBNova manages **one MySQL server** running on the same machine or VPS. You sign
     - **SQL dumps:** a whole database or chosen tables to `.sql` or `.sql.gz` via `mysqldump`, in a consistent snapshot, ready to re-import anywhere.
     - **CSV:** one table, or the full result of a SQL editor query, to `.csv` or `.csv.gz`. NULL stays distinguishable from empty text, and query exports are read-only.
     - Exports run in a background job, with progress and cancel, and are downloaded through short-lived signed links.
-- **Safety.** A read-only mode enforced in the data layer, typed confirmations for destructive actions, and an audit log that never stores row values.
+- **Monitoring and maintenance.**
+    - A live process list with Stop query / Kill connection, plus server variables and status counters.
+    - Dashboard charts for queries per second, connections and buffer pool use.
+    - OPTIMIZE / ANALYZE / CHECK / REPAIR on one or many tables, and a data vs index size breakdown.
+- **Per-user preferences.** Rows per page, the SQL row limit and the query timeout, within maximums set in `.env`.
+- **Safety.** A read-only mode enforced in the data layer, typed confirmations for destructive actions, and a filterable audit log that never stores row values.
 
 ### Measured on a laptop (MySQL 8.0.39)
 
@@ -117,7 +122,7 @@ To generate stress data, use `php artisan dbnova:stress:seed-table` (a 10M-row t
 | 0–5   | Architecture, foundation, explorer, table browser, schema, SQL editor | done    |
 | 6     | Large import engine                                                   | done    |
 | 7     | Export engine: SQL dumps and CSV                                      | done    |
-| 8     | Monitoring: process list, variables, charts, table maintenance        | planned |
+| 8     | Monitoring: process list, variables, charts, table maintenance        | review  |
 | 9     | Hardening and stress testing                                          | planned |
 | 10    | Release, Docker Compose, install guide                                | planned |
 

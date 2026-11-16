@@ -1,6 +1,6 @@
 # Phase 8 — Monitoring & advanced operations
 
-**Status:** review (8a built, awaiting review; 8b not started)
+**Status:** review (8a committed as 8535d4d; 8b built, awaiting review)
 **Goal:** Visibility into the running server, plus maintenance operations.
 **New dependencies:** none. The user chose hand-built SVG charts over `apexcharts`.
 
@@ -21,15 +21,17 @@
 
 ### 8b — operations
 
-- [ ] Table maintenance: OPTIMIZE / ANALYZE / CHECK / REPAIR (MyISAM), single and bulk, with results shown
-- [ ] Database/table size breakdown (data vs index) on the database page
-- [ ] Audit log viewer (`pages/system/Audit.vue`) with filters
-- [ ] User-facing settings page for DBNova preferences (page size, row cap, query timeout): per user, capped by `.env`
+- [x] Table maintenance: OPTIMIZE / ANALYZE / CHECK / REPAIR (MyISAM), single and bulk, with results shown
+- [x] Database/table size breakdown (data vs index) on the database page
+- [x] Audit log viewer (`pages/system/Audit.vue`) with filters
+- [x] User-facing settings page for DBNova preferences (page size, row cap, query timeout): per user, capped by `.env`
 
 ## Tests
 
-- [x] Feature: kill requires confirmation and is audited, and read-only blocks kill (maintenance in 8b)
+- [x] Feature: kill requires confirmation and is audited, and read-only blocks kill
+- [x] Feature: maintenance validation, audit and read-only; audit viewer visibility and filters; preferences validation and effect
 - [x] Integration: the process list includes a running `SLEEP()`, and kill ends it
+- [x] Integration: OPTIMIZE/ANALYZE/CHECK/REPAIR on InnoDB and MyISAM, base tables only, read-only allows CHECK only; data/index sizes; `hasGlobalPrivilege`
 
 ## Acceptance criteria
 
@@ -38,7 +40,7 @@
 
 ## Completion notes
 
-### 8a — live server (2026-11-16, awaiting review)
+### 8a — live server (2026-11-16, committed 8535d4d)
 
 - **Adapter:** `ServerInspectorInterface` gained `processes()`, `kill(id, connection)`, `variables()`, `status()` and `metrics()`.
     - Kill runs `KILL QUERY n` or `KILL n` with an integer id. It refuses read-only mode in the adapter and refuses DBNova's own connection. An unknown thread (1094) returns false.
@@ -54,3 +56,23 @@
     - The palette was validated: dark `--chart-2` was lowered to `hsl(160 60% 40%)` to pass the lightness band.
 - Checked with headless Chrome screenshots (dark and light), including the kill dialog on a real running `SLEEP(40)`.
 - Tests: 623 passing against real MySQL. Integration tests find a CLI `SLEEP(30)`, stop its query (the client stays connected, exit 0) and kill its connection (the client exits non-zero). `composer ci:check` is green.
+
+### 8b — operations (2026-11-16, awaiting review)
+
+- **Size breakdown:** `TableInfo` gained `dataBytes`, `indexBytes` and `freeBytes` (`DATA_FREE`).
+    - The database page shows a storage bar (data vs indexes, 2 px gap, legend with values) and per-table Data / Indexes / Free / Total columns.
+    - "Free" is labelled "allocated but unused", because InnoDB always reports a few MB per table and OPTIMIZE can't return all of it.
+- **Maintenance:** `TableManagerInterface::maintain()` plus `MaintenanceController` (`POST databases/{db}/maintenance`).
+    - Tick tables (views can't be selected), then use the Maintenance menu. A dialog explains the operation, runs it and shows MySQL's rows (status, note, error).
+    - Write operations are audited with an error count, and the page reloads sizes after OPTIMIZE and ANALYZE.
+    - `CHECK TABLE` runs through `PDO::query`, because it can't be prepared.
+- **Audit log** (`system/Audit`, sidebar entry "Audit log"):
+    - Filters for action, user, database and result, with 50 entries per page.
+    - Your own entries only, unless the account holds global `CREATE USER`.
+- **Preferences** (Settings → Preferences, now the default settings page):
+    - Rows per page, SQL editor row limit, and query timeout (in seconds). Empty means the default.
+    - Maximums come from `DBNOVA_MAX_PAGE_SIZE` (1000), `DBNOVA_MAX_QUERY_ROW_CAP` (10000) and `DBNOVA_MAX_QUERY_TIMEOUT_MS` (300000).
+    - `ApplyUserPreferences` overrides the config for the request, so every existing reader picks the values up unchanged.
+- **Checks:**
+    - Headless Chrome screenshots, dark and light, on a seeded database (InnoDB + MyISAM + a view): OPTIMIZE of 3 tables shrank it from 22.1 MB to 16.8 MB and showed MySQL's "recreate + analyze" notes. The audit entry and the preferences page were also captured.
+    - 653 tests pass against real MySQL, and `composer ci:check` is green.

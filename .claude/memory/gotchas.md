@@ -49,4 +49,7 @@ Append entries during and at the end of each phase. Use the format `Phase N — 
 - Phase 8 — `Threads_running` counts MySQL's background threads (e.g. the event scheduler) but `Threads_connected` doesn't, so "running" can exceed "connected". — Label both series honestly and explain it on the chart.
 - Phase 8 — A running prepared statement shows `Command = Execute`, not `Query`, in the process list. Both are "running a statement". — Offer Stop query for either.
 - Phase 8 — A new Inertia page fails page tests with "Not a valid Inertia response" (actually a 500: "Unable to locate file in Vite manifest") until the frontend is rebuilt. — Run `npm run build` after adding a page, before running its tests.
+- Phase 8 — `CHECK TABLE` can't be a server-side prepared statement, but OPTIMIZE/ANALYZE/REPAIR can. — Run maintenance with `PDO::query` on catalog-checked, quoted names.
+- Phase 8 — A new secondary index shows `INDEX_LENGTH = 0` until InnoDB's persistent statistics refresh. — Run `ANALYZE TABLE` before asserting sizes in tests.
+- Phase 8 — InnoDB's `DATA_FREE` is a few MB (free extents) even on a freshly built table. — Don't promise OPTIMIZE will reclaim it; label it "allocated but unused".
 - Phase 0 — `mysql` on PATH is a shell alias. — Always resolve binaries from config, never from `PATH` lookups that rely on the interactive shell.

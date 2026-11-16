@@ -127,3 +127,9 @@ test('variables, status and metrics read real values', function () {
         ->and($metrics->bufferPoolPagesTotal)->toBeGreaterThan(0)
         ->and($metrics->bufferPoolPagesFree)->toBeLessThanOrEqual($metrics->bufferPoolPagesTotal);
 });
+
+test('global privileges are read for the signed-in account', function () {
+    // The test account is limited to dbnova_test databases: it holds no global CREATE USER.
+    expect($this->inspector->hasGlobalPrivilege('CREATE USER'))->toBeFalse()
+        ->and($this->inspector->hasGlobalPrivilege('USAGE'))->toBeTrue();
+});

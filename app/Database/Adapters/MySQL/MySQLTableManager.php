@@ -3,6 +3,8 @@
 namespace App\Database\Adapters\MySQL;
 
 use App\Database\Contracts\TableManagerInterface;
+use App\Database\DTOs\Maintenance\MaintenanceOperation;
+use App\Database\DTOs\Maintenance\MaintenanceResult;
 use App\Database\DTOs\Schema\AddColumn;
 use App\Database\DTOs\Schema\ColumnDefinition;
 use App\Database\DTOs\Schema\CreateTable;
@@ -17,6 +19,8 @@ use App\Database\Exceptions\LockingDdlRequiresConfirmationException;
 use App\Database\Support\IdentifierQuoter;
 use App\Database\Support\ReadOnlyGuard;
 use InvalidArgumentException;
+use PDO;
+use PDOException;
 
 class MySQLTableManager implements TableManagerInterface
 {
@@ -129,6 +133,53 @@ class MySQLTableManager implements TableManagerInterface
             array_keys($grouped),
             array_values($grouped),
         );
+    }
+
+    public function maintain(string $database, array $tables, MaintenanceOperation $operation): array
+    {
+        if ($operation->changesServer()) {
+            $this->readOnlyGuard->assertWritable();
+        }
+
+        if ($tables === []) {
+            return [];
+        }
+
+        // Only names that are base tables in the catalog reach the statement (views cannot be optimized or repaired).
+        $known = [];
+
+        foreach ($this->schemaManager->tables($database) as $info) {
+            if ($info->type === 'table') {
+                $known[$info->name] = true;
+            }
+        }
+
+        $quoted = [];
+
+        foreach (array_values(array_unique($tables)) as $table) {
+            if (! isset($known[$table])) {
+                throw new DatabaseOperationException("The table \"{$table}\" does not exist in \"{$database}\".");
+            }
+
+            $quoted[] = $this->quoter->quote($database).'.'.$this->quoter->quote($table);
+        }
+
+        // OPTIMIZE/ANALYZE/REPAIR/CHECK return result rows; CHECK TABLE cannot be prepared, so run it as a plain query.
+        try {
+            $statement = $this->connection->pdo()->query($operation->keyword().' TABLE '.implode(', ', $quoted));
+
+            /** @var list<array<string, mixed>> $rows */
+            $rows = $statement === false ? [] : $statement->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $exception) {
+            throw DatabaseOperationException::fromPdoException($exception);
+        }
+
+        return array_map(fn (array $row): MaintenanceResult => new MaintenanceResult(
+            table: (string) ($row['Table'] ?? ''),
+            operation: (string) ($row['Op'] ?? $operation->value),
+            type: strtolower((string) ($row['Msg_type'] ?? '')),
+            message: (string) ($row['Msg_text'] ?? ''),
+        ), $rows);
     }
 
     /**

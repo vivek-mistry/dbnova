@@ -3,6 +3,8 @@
 use App\Database\Adapters\MySQL\MySQLConnection;
 use App\Database\Contracts\DatabaseAdapterInterface;
 use App\Database\DTOs\ColumnInfo;
+use App\Database\DTOs\Maintenance\MaintenanceOperation;
+use App\Database\DTOs\Maintenance\MaintenanceResult;
 use App\Database\DTOs\Schema\AddColumn;
 use App\Database\DTOs\Schema\AddForeignKey;
 use App\Database\DTOs\Schema\AddIndex;
@@ -24,6 +26,7 @@ use App\Database\DTOs\Schema\TruncateTable;
 use App\Database\DTOs\TableRef;
 use App\Database\Exceptions\DatabaseOperationException;
 use App\Database\Exceptions\LockingDdlRequiresConfirmationException;
+use App\Database\Exceptions\ReadOnlyModeException;
 use App\Models\User;
 
 /**
@@ -190,4 +193,68 @@ test('the preview shows exactly the statement that runs', function () {
         "ALTER TABLE `{$this->database}`.`customers` ADD COLUMN `nickname` varchar(50) NULL COMMENT 'Customer\\'s nickname'",
     ]);
     expect($this->tables->apply(new TableRef($this->database, 'customers'), $change)->statements)->toBe($plan->statements);
+});
+
+test('maintenance runs on several tables and returns MySQL\'s rows', function () {
+    ($this->createCustomers)();
+    $this->connection->statement("CREATE TABLE `{$this->database}`.`legacy` (id INT PRIMARY KEY) ENGINE=MyISAM");
+    $this->connection->statement("INSERT INTO `{$this->database}`.`customers` (email) VALUES ('a@example.com'), ('b@example.com')");
+
+    $byTable = fn (array $results): array => collect($results)
+        ->groupBy(fn (MaintenanceResult $row): string => $row->table)
+        ->map(fn ($rows): array => $rows->map(fn (MaintenanceResult $row): string => $row->type.': '.$row->message)->all())
+        ->all();
+
+    $analyzed = $byTable($this->tables->maintain($this->database, ['customers', 'legacy'], MaintenanceOperation::Analyze));
+    expect($analyzed["{$this->database}.customers"])->toContain('status: OK');
+
+    $checked = $byTable($this->tables->maintain($this->database, ['customers'], MaintenanceOperation::Check));
+    expect($checked["{$this->database}.customers"])->toBe(['status: OK']);
+
+    // InnoDB has no in-place OPTIMIZE: MySQL rebuilds the table and says so in a note.
+    $optimized = $byTable($this->tables->maintain($this->database, ['customers'], MaintenanceOperation::Optimize));
+    expect($optimized["{$this->database}.customers"])->toContain('status: OK')
+        ->and(implode("\n", $optimized["{$this->database}.customers"]))->toContain('recreate + analyze');
+
+    // REPAIR works on MyISAM; for InnoDB MySQL reports a note instead of failing.
+    $repaired = $byTable($this->tables->maintain($this->database, ['legacy', 'customers'], MaintenanceOperation::Repair));
+    expect($repaired["{$this->database}.legacy"])->toContain('status: OK')
+        ->and(implode("\n", $repaired["{$this->database}.customers"]))->toContain("doesn't support repair");
+});
+
+test('maintenance only accepts base tables that exist', function () {
+    ($this->createCustomers)();
+    $this->connection->statement("CREATE VIEW `{$this->database}`.`emails` AS SELECT email FROM `{$this->database}`.`customers`");
+
+    expect(fn () => $this->tables->maintain($this->database, ['customers', 'nope'], MaintenanceOperation::Check))
+        ->toThrow(DatabaseOperationException::class, 'The table "nope" does not exist');
+    expect(fn () => $this->tables->maintain($this->database, ['emails'], MaintenanceOperation::Optimize))
+        ->toThrow(DatabaseOperationException::class, 'The table "emails" does not exist');
+    expect(fn () => $this->tables->maintain($this->database, ['x`; DROP DATABASE mysql; --'], MaintenanceOperation::Check))
+        ->toThrow(DatabaseOperationException::class);
+});
+
+test('read-only mode allows CHECK but refuses changes', function () {
+    ($this->createCustomers)();
+    config(['dbnova.read_only' => true]);
+
+    expect($this->tables->maintain($this->database, ['customers'], MaintenanceOperation::Check))->not->toBeEmpty();
+
+    foreach ([MaintenanceOperation::Optimize, MaintenanceOperation::Analyze, MaintenanceOperation::Repair] as $operation) {
+        expect(fn () => $this->tables->maintain($this->database, ['customers'], $operation))->toThrow(ReadOnlyModeException::class);
+    }
+});
+
+test('table sizes are split into data, indexes and free space', function () {
+    ($this->createCustomers)();
+    $this->tables->apply(new TableRef($this->database, 'customers'), new AddIndex(new IndexDefinition(IndexType::Unique, ['email'], 'customers_email')));
+
+    // InnoDB sizes a new index from its persistent statistics, which ANALYZE refreshes.
+    $this->tables->maintain($this->database, ['customers'], MaintenanceOperation::Analyze);
+    $info = app(DatabaseAdapterInterface::class)->schema()->table($this->database, 'customers');
+
+    expect($info->dataBytes)->toBeGreaterThan(0)
+        ->and($info->indexBytes)->toBeGreaterThan(0)
+        ->and($info->freeBytes)->toBeInt()
+        ->and($info->sizeBytes)->toBe($info->dataBytes + $info->indexBytes);
 });

@@ -55,7 +55,7 @@ class MySQLSchemaManager implements SchemaManagerInterface
     private function tableRows(string $database, ?string $table = null): array
     {
         return $this->connection->select(
-            'SELECT TABLE_NAME, TABLE_TYPE, ENGINE, TABLE_ROWS, DATA_LENGTH + INDEX_LENGTH AS SIZE_BYTES, TABLE_COLLATION
+            'SELECT TABLE_NAME, TABLE_TYPE, ENGINE, TABLE_ROWS, DATA_LENGTH + INDEX_LENGTH AS SIZE_BYTES, DATA_LENGTH, INDEX_LENGTH, DATA_FREE, TABLE_COLLATION
             FROM information_schema.TABLES
             WHERE TABLE_SCHEMA = ?'.($table === null ? '' : ' AND TABLE_NAME = ?').'
             ORDER BY TABLE_NAME',
@@ -75,6 +75,9 @@ class MySQLSchemaManager implements SchemaManagerInterface
             approximateRows: $row['TABLE_ROWS'] === null ? null : (int) $row['TABLE_ROWS'],
             sizeBytes: $row['SIZE_BYTES'] === null ? null : (int) $row['SIZE_BYTES'],
             collation: $row['TABLE_COLLATION'] === null ? null : (string) $row['TABLE_COLLATION'],
+            dataBytes: isset($row['DATA_LENGTH']) ? (int) $row['DATA_LENGTH'] : null,
+            indexBytes: isset($row['INDEX_LENGTH']) ? (int) $row['INDEX_LENGTH'] : null,
+            freeBytes: isset($row['DATA_FREE']) ? (int) $row['DATA_FREE'] : null,
         );
     }
 

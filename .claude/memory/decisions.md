@@ -49,3 +49,9 @@ Newest entries go at the bottom. Use the format `YYYY-MM-DD — Decision — Why
     - Formula injection is documented, not escaped (exact data). An opt-in "safe for spreadsheets" mode can be added if the user wants it.
     - **Why:** user choices (always through the job). A filesorted query took 186 s to its first row in the stress run. — IMPORT_EXPORT_ENGINE.md
 - 2026-11-16 — Phase 8 is split into 8a (process list, variables/status, dashboard charts) and 8b (maintenance, size breakdown, audit viewer, settings). Charts are hand-built SVG with no `apexcharts`. Kill offers "Stop query" (KILL QUERY, the default) and "Kill connection" (KILL), both confirmed and audited. Settings are per user in SQLite, capped by the `.env` values. — User's choices at /phase-start 8. — phase-08-monitoring.md
+- 2026-11-16 — Phase 8b defaults:
+    - **Audit viewer:** each account sees its own entries, and accounts with global `CREATE USER` see everyone's.
+    - **Preferences:** stored as `users.preferences` JSON and applied per request by middleware overriding `dbnova.limits.*`. New `DBNOVA_MAX_*` env maximums; the existing `.env` values stay the defaults.
+    - **Maintenance:** runs synchronously (`set_time_limit(0)`); CHECK is allowed in read-only mode and not audited.
+    - **Why:** there is no admin role in DBNova; CREATE USER already implies control over every account. The config override needs no plumbing through adapters. Maintenance results are short rows, and OPTIMIZE progress is visible under Processes.
+    - phase-08-monitoring.md, SECURITY.md

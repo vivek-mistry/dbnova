@@ -76,6 +76,24 @@ DBNova is effectively a superuser console for a MySQL server. Its threat model a
 - Kill needs a confirmation (`confirm: true`, enforced on the server), is throttled (30/min), is blocked by read-only mode **in the adapter**, refuses DBNova's own connection, and is audited (`process.kill-query` / `process.kill`) with the target's id, user, command and time. The SQL is not stored.
 - The id is validated as a number in the route and cast to int before `KILL`, which takes no placeholders.
 
+## Table maintenance, audit viewer and preferences (Phase 8b)
+
+- **Maintenance** (`OPTIMIZE`, `ANALYZE`, `CHECK`, `REPAIR TABLE`):
+    - Table names must be base tables in the catalog of that database before they are quoted into the statement. Views and unknown names are refused.
+    - At most 200 tables per request, throttled at 30/min.
+    - Read-only mode refuses everything except `CHECK`, which only reads.
+    - Changes are audited (`table.optimize` etc.) with the table list and how many tables MySQL reported errors for. `CHECK` is not audited.
+- **Audit viewer:**
+    - Every account sees its own entries.
+    - Accounts holding the global `CREATE USER` privilege see everyone's: they can already create or alter any account.
+    - The check reads `information_schema.USER_PRIVILEGES` for `CURRENT_USER()`. If it fails, the account falls back to its own entries.
+    - A `user` filter from a non-privileged account is ignored, so it can't reveal other accounts' entries.
+    - Privileges that come only from a role are not seen, which fails closed.
+- **Preferences:**
+    - Per user, stored in `users.preferences`, and applied per request by `ApplyUserPreferences`.
+    - Validated against `.env` maximums (`DBNOVA_MAX_*`), and clamped again when applied in case a maximum is lowered later.
+    - Queued jobs never pass through the middleware and keep the `.env` values.
+
 ## Web
 
 - CSRF on all state-changing requests (Laravel default, including chunk PUTs).

@@ -1,10 +1,12 @@
 <?php
 
+use App\Http\Controllers\AuditController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\DatabaseTreeController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\ImportController;
+use App\Http\Controllers\MaintenanceController;
 use App\Http\Controllers\ProcessController;
 use App\Http\Controllers\QueryController;
 use App\Http\Controllers\RecordController;
@@ -29,6 +31,7 @@ Route::middleware(['auth', EnsureMySQLCredentials::class])->group(function () {
         ->middlewareFor('destroy', 'throttle:5,1');
 
     Route::post('databases/{database}/schema/preview', [SchemaChangeController::class, 'preview'])->name('schema.preview');
+    Route::post('databases/{database}/maintenance', MaintenanceController::class)->middleware('throttle:30,1')->name('maintenance.run');
     Route::post('databases/{database}/schema/apply', [SchemaChangeController::class, 'apply'])->name('schema.apply');
 
     Route::prefix('databases/{database}/tables/{table}')->name('tables.')->group(function () {
@@ -81,6 +84,7 @@ Route::middleware(['auth', EnsureMySQLCredentials::class])->group(function () {
     Route::get('server/metrics', [ServerController::class, 'metrics'])->name('server.metrics');
 
     Route::get('system', [SystemController::class, 'index'])->name('system.index');
+    Route::get('system/audit', [AuditController::class, 'index'])->name('audit.index');
 });
 
 require __DIR__.'/settings.php';

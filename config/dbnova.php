@@ -68,6 +68,14 @@ return [
         'min_free_disk_bytes' => (int) env('DBNOVA_MIN_FREE_DISK_BYTES', 5 * 1024 * 1024 * 1024),
         // A schema change that would copy (and lock) a table with more rows than this needs explicit confirmation.
         'locking_ddl_confirm_rows' => (int) env('DBNOVA_LOCKING_DDL_CONFIRM_ROWS', 1_000_000),
+
+        // Users may change page_size, query_row_cap and query_timeout_ms under Settings → Preferences,
+        // up to these maximums. The values above are the defaults.
+        'max' => [
+            'page_size' => (int) env('DBNOVA_MAX_PAGE_SIZE', 1000),
+            'query_row_cap' => (int) env('DBNOVA_MAX_QUERY_ROW_CAP', 10000),
+            'query_timeout_ms' => (int) env('DBNOVA_MAX_QUERY_TIMEOUT_MS', 300000),
+        ],
     ],
 
     /*

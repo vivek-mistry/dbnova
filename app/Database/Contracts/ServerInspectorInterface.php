@@ -57,4 +57,12 @@ interface ServerInspectorInterface
      * @throws DatabaseOperationException
      */
     public function metrics(): ServerMetrics;
+
+    /**
+     * Whether the signed-in account holds a global (ON *.*) privilege such as "CREATE USER".
+     * Privileges that come only from an active role are not seen.
+     *
+     * @throws DatabaseOperationException
+     */
+    public function hasGlobalPrivilege(string $privilege): bool;
 }

@@ -126,6 +126,25 @@ class MySQLServerInspector implements ServerInspectorInterface
         );
     }
 
+    public function hasGlobalPrivilege(string $privilege): bool
+    {
+        // CURRENT_USER() is the matched account, "user@host"; the host never contains "@".
+        $account = (string) $this->connection->scalar('SELECT CURRENT_USER()');
+        $at = strrpos($account, '@');
+
+        if ($at === false) {
+            return false;
+        }
+
+        // information_schema writes the grantee as 'user'@'host'. Accounts only see their own rows unless privileged.
+        $grantee = "'".substr($account, 0, $at)."'@'".substr($account, $at + 1)."'";
+
+        return (int) $this->connection->scalar(
+            'SELECT COUNT(*) FROM information_schema.USER_PRIVILEGES WHERE GRANTEE = ? AND PRIVILEGE_TYPE = ?',
+            [$grantee, strtoupper($privilege)],
+        ) > 0;
+    }
+
     /**
      * @return list<array{name: string, value: string}>
      */

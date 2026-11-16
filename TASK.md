@@ -1,14 +1,17 @@
 # DBNova — Current Task
 
-**Current phase:** Phase 8 — Monitoring & advanced operations (8a built, awaiting review; 8b next)
+**Current phase:** Phase 8 — Monitoring & advanced operations (8a committed; 8b built, awaiting review)
 **Phase file:** [.claude/phases/phase-08-monitoring.md](.claude/phases/phase-08-monitoring.md)
-**Status:** Review (8a)
+**Status:** Review (8b)
 **Branch:** `phase/00-architecture` (all phases so far)
 
 ## Now
 
-- Review 8a in the browser: Dashboard (live charts fill in over a minute), Processes (filter, idle toggle, Pause, Stop query / Kill connection on a test query such as `SELECT SLEEP(60)` from another client), Variables and Status tabs
-- Then 8b: table maintenance, data vs index size breakdown, audit log viewer, per-user settings
+- Review 8b in the browser:
+    - A database page: storage bar, the Data/Indexes/Free columns, and tick tables → Maintenance → Analyze / Optimize / Check / Repair.
+    - Audit log in the sidebar, with filters.
+    - Settings → Preferences: rows per page, SQL row limit, query timeout.
+- Then Phase 9: hardening and stress testing.
 
 ## Done
 
@@ -29,7 +32,7 @@
 
 ## Blocked / waiting on user
 
-- Approve the 8a commit
+- Approve the 8b commit
 - Optional: an opt-in "safe for spreadsheets" CSV mode (escapes = + - @), yes or no
 
 - Decide on LOW-2: a cap on completed exports kept per user (e.g. 10 files or N GB), or leave as is

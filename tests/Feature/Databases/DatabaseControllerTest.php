@@ -130,7 +130,7 @@ describe('show', function () {
         $schema = fakeSchemaManager();
         $schema->shouldReceive('database')->with('shop')->andReturn(shopDatabase());
         $schema->shouldReceive('tables')->with('shop')->andReturn([
-            new TableInfo('orders', 'table', 'InnoDB', 1200, 65536, 'utf8mb4_0900_ai_ci'),
+            new TableInfo('orders', 'table', 'InnoDB', 1200, 65536, 'utf8mb4_0900_ai_ci', 49152, 16384, 4096),
             new TableInfo('order_totals', 'view', null, null, null, null),
         ]);
         $schema->shouldReceive('renameBlockers')->with('shop')->andReturn(['1 view']);
@@ -149,6 +149,9 @@ describe('show', function () {
                 'approximateRows' => 1200,
                 'sizeBytes' => 65536,
                 'collation' => 'utf8mb4_0900_ai_ci',
+                'dataBytes' => 49152,
+                'indexBytes' => 16384,
+                'freeBytes' => 4096,
             ])
             ->where('renameBlockers', ['1 view'])
         );
