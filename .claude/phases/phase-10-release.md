@@ -1,12 +1,13 @@
 # Phase 10 — Release & self-hosted installation
 
 **Status:** not started
+
+**User decision (2026-11-16):** no Docker. Docker Compose was dropped from this phase; the release is a bare-metal install only.
 **Goal:** Someone else can install, run, upgrade and back up DBNova from the docs alone.
 
 ## Tasks
 
 - [ ] Finalize `docs/INSTALL.md` (bare metal: Ubuntu + nginx + PHP-FPM + supervisor/systemd + cron)
-- [ ] Docker Compose (app, worker, scheduler) with MySQL client binaries in the image, plus an example for reaching host MySQL
 - [ ] A public `README.md` at the repo root (features, screenshots, requirements, quick start). Ask before creating it
 - [ ] `CHANGELOG.md` + the `v1.0.0` semver tag (with the user's approval)
 - [ ] Upgrade guide + backup and restore of `database/database.sqlite`

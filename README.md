@@ -6,7 +6,7 @@ A self-hosted MySQL manager: a faster, more trustworthy alternative to phpMyAdmi
 
 DBNova manages **one MySQL server** running on the same machine or VPS. You sign in with a MySQL account, and that account's grants decide what you can do. It's built for everyday browsing and for importing and exporting production-sized databases (10 GB and more) without running out of memory.
 
-> **Status:** in active development. Phases 0–8 (through import/export and monitoring) are done. Next up: hardening, then a release with Docker support. See [Roadmap](#roadmap).
+> **Status:** in active development. Phases 0–9 (through monitoring and security/performance hardening) are done. Next up: the 1.0 release with a finished install guide. See [Roadmap](#roadmap).
 
 ## Features
 
@@ -35,6 +35,12 @@ DBNova manages **one MySQL server** running on the same machine or VPS. You sign
     - OPTIMIZE / ANALYZE / CHECK / REPAIR on one or many tables, and a data vs index size breakdown.
 - **Per-user preferences.** Rows per page, the SQL row limit and the query timeout, within maximums set in `.env`.
 - **Safety.** A read-only mode enforced in the data layer, typed confirmations for destructive actions, and a filterable audit log that never stores row values.
+- **Hardened.**
+    - Passwords never reach logs or stack traces.
+    - Sign-in must match the exact MySQL account, and password guessing is limited.
+    - Every write action has its own rate limit.
+    - Hostile database and table names are fuzz-tested against a real server.
+    - Recovery is drilled: a killed worker, a stopped MySQL server, a full disk and a dropped upload connection all end cleanly.
 
 ### Measured on a laptop (MySQL 8.0.39)
 
@@ -44,6 +50,11 @@ DBNova manages **one MySQL server** running on the same machine or VPS. You sign
 | Export 10M rows / 3.7 GB of SQL to `.sql.gz` | 26 s, worker memory flat (+4 MB), 261 MB file |
 | Export a 10M-row table to `.csv`             | 23 s, worker memory flat (+2 MB)              |
 | Export → re-import round trip                | identical row counts and table checksums      |
+| Import 2 GB of SQL as `.sql.gz` (294 MB)     | 180 s, 57 MB peak worker process              |
+| Browse a 10M-row table, any page (keyset)    | 3–8 ms per page, first or last                |
+| Scroll a 120-column grid                     | 60 fps (rows and columns virtualized)         |
+
+Measured on an Apple M2 (8 cores, 16 GB). The details and the recovery drill results are in [`.claude/docs/PERFORMANCE.md`](.claude/docs/PERFORMANCE.md).
 
 ## Tech stack
 
@@ -167,6 +178,13 @@ php artisan test --compact
 
 To generate stress data, use `php artisan dbnova:stress:seed-table` (a 10M-row table) or `php artisan dbnova:stress:make-dump --size=2G`.
 
+Security tests (`tests/Feature/Security`) cover password leaks in stack traces, per-route rate limits and identifier fuzzing (a canary database must survive hostile names). The disk-full recovery drill is opt-in, because it needs a small throwaway volume:
+
+```bash
+diskutil erasevolume APFS dbnovadrill $(hdiutil attach -nomount ram://131072)   # macOS: a 64 MB RAM disk
+DBNOVA_DRILL_SMALL_VOLUME=/Volumes/dbnovadrill php artisan test tests/Feature/Drills
+```
+
 ## Roadmap
 
 | Phase | Scope                                                                 | Status  |
@@ -175,8 +193,8 @@ To generate stress data, use `php artisan dbnova:stress:seed-table` (a 10M-row t
 | 6     | Large import engine                                                   | done    |
 | 7     | Export engine: SQL dumps and CSV                                      | done    |
 | 8     | Monitoring: process list, variables, charts, table maintenance        | done    |
-| 9     | Hardening and stress testing                                          | planned |
-| 10    | Release, Docker Compose, install guide                                | planned |
+| 9     | Hardening and stress testing                                          | done    |
+| 10    | Release and install guide                                             | planned |
 
 The phase plans live in [`.claude/phases/`](.claude/phases/README.md). The architecture docs and decision records are in [`.claude/docs/`](.claude/docs/).
 
@@ -186,6 +204,8 @@ DBNova is effectively a superuser console for your MySQL server, so:
 
 - Don't expose it publicly without HTTPS.
 - For untrusted dumps, import with an account that is limited to the target database.
+- Remove anonymous MySQL accounts (`mysql_secure_installation`). DBNova refuses sign-ins that MySQL matches to a different account, but the server shouldn't have them anyway.
+- In production, set `zend.exception_ignore_args = On` in php.ini.
 
 The threat model and the safeguards are documented in [`.claude/docs/SECURITY.md`](.claude/docs/SECURITY.md).
 

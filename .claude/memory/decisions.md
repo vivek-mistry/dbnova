@@ -61,3 +61,4 @@ Newest entries go at the bottom. Use the format `YYYY-MM-DD — Decision — Why
     - **Brand:** the sidebar and page titles always say "DBNova", whatever `APP_NAME` is.
     - **Why:** the user asked to "fix open things" with recommended defaults. Refusing is safer than deleting files the user may not have downloaded yet.
     - SECURITY.md, README Configuration
+- 2026-11-16 — No Docker: the user stopped the Phase 10 Docker work and asked for it to be reverted. Docker Compose is out of scope; the release is a bare-metal install. — User decision. — phase-10-release.md

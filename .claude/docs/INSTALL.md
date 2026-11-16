@@ -93,7 +93,3 @@ user=www-data
 ## Backups
 
 Back up `database/database.sqlite` (users, history, audit log) and `.env`. Managed databases are backed up with DBNova's export or your own tooling.
-
-## Docker Compose (Phase 10)
-
-Services: `app` (php-fpm + nginx), `worker`, `scheduler`, plus the MySQL client binaries in the image. MySQL itself is the host's server, reached through a socket mount or `host.docker.internal`.

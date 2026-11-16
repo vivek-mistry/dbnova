@@ -2,13 +2,12 @@
 
 **Current phase:** Phase 9 — Hardening & stress testing
 **Phase file:** [.claude/phases/phase-09-hardening.md](.claude/phases/phase-09-hardening.md)
-**Status:** Review (Phase 9 done)
+**Status:** Phase 9 done (931aed7)
 **Branch:** `phase/00-architecture` (all phases so far)
 
 ## Now
 
-- Review Phase 9 (fuzzing, drills, benchmarks, PHPStan 8, grid column virtualization)
-- Then Phase 10: release, Docker Compose, install guide
+- Then Phase 10: release and install guide (no Docker, per user)
 
 ## Done
 

@@ -1,6 +1,6 @@
 # Phase 9 — Security, performance & recovery hardening
 
-**Status:** review (all tasks done, awaiting review)
+**Status:** done (931aed7)
 **Goal:** Prove the V1 acceptance tests and close security gaps before release.
 
 ## Tasks
