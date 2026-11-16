@@ -205,6 +205,7 @@ describe('destroy', function () {
     beforeEach(function () {
         $this->connector = $this->mock(MySQLConnector::class);
         $this->connector->shouldReceive('serverLabel')->andReturn('127.0.0.1:3306');
+        $this->connector->shouldReceive('matchedUser')->andReturnUsing(fn () => auth()->user()?->username);
     });
 
     test('drops the database after the name is typed and the MySQL password confirmed', function () {

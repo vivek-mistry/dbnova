@@ -41,7 +41,7 @@ class FortifyServiceProvider extends ServiceProvider
         Fortify::authenticateUsing(fn (Request $request): ?User => app(AuthenticateMySQLUser::class)($request));
 
         Fortify::confirmPasswordsUsing(
-            fn (User $user, ?string $password): bool => app(AuthenticateMySQLUser::class)->verify($user->username, (string) $password),
+            fn (User $user, #[\SensitiveParameter] ?string $password): bool => app(AuthenticateMySQLUser::class)->verify($user->username, (string) $password),
         );
     }
 

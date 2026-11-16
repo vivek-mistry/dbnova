@@ -29,7 +29,7 @@ class ProcessRunner
      * @param  array{username: string, password: string}  $credentials
      * @param  list<string>  $arguments
      */
-    public function run(string $binary, array $credentials, array $arguments, ?int $timeoutSeconds = 60): ProcessResult
+    public function run(string $binary, #[\SensitiveParameter] array $credentials, array $arguments, ?int $timeoutSeconds = 60): ProcessResult
     {
         $defaultsFile = DefaultsFile::create($credentials);
 
@@ -63,7 +63,7 @@ class ProcessRunner
      * @param  Traversable<int, string>  $input
      * @param  callable(InvokedProcess): void  $onTick
      */
-    public function stream(string $binary, array $credentials, array $arguments, Traversable $input, callable $onTick): ProcessResult
+    public function stream(string $binary, #[\SensitiveParameter] array $credentials, array $arguments, Traversable $input, callable $onTick): ProcessResult
     {
         $defaultsFile = DefaultsFile::create($credentials);
         $process = null;
@@ -112,7 +112,7 @@ class ProcessRunner
      * @param  callable(): void  $onTick
      * @return array{exitCode: int, errorOutput: string} The last 64 KB of stderr.
      */
-    public function streamOutput(string $binary, array $credentials, array $arguments, callable $onOutput, callable $onTick): array
+    public function streamOutput(string $binary, #[\SensitiveParameter] array $credentials, array $arguments, callable $onOutput, callable $onTick): array
     {
         $defaultsFile = DefaultsFile::create($credentials);
         $process = new SymfonyProcess([

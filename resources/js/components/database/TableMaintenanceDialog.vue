@@ -56,7 +56,7 @@ const descriptions: Record<MaintenanceOperation, string> = {
     analyze:
         "Refreshes the index statistics MySQL's optimizer uses to choose query plans. It is quick and does not rewrite data.",
     check: 'Checks each table for errors. It only reads, so it is allowed in read-only mode.',
-    repair: 'Repairs a damaged MyISAM, ARCHIVE or CSV table. InnoDB does not support REPAIR; MySQL reports that per table instead of changing anything.',
+    repair: 'Repairs a damaged MyISAM, ARCHIVE or CSV table. A repair can drop rows MySQL cannot read, so export the table first if you can. InnoDB does not support REPAIR; MySQL reports that per table instead of changing anything.',
 };
 
 const title = computed(() =>
@@ -76,7 +76,7 @@ async function run(): Promise<void> {
 
     const operation = props.operation;
     error.value = null;
-    http.transform(() => ({ operation, tables: props.tables }));
+    http.transform(() => ({ operation, tables: props.tables, confirm: true }));
 
     try {
         const response = await http.post(runRoute.url(props.database));

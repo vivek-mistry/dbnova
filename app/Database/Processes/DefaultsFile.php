@@ -17,7 +17,7 @@ final class DefaultsFile
     /**
      * @param  array{username: string, password: string}  $credentials
      */
-    public static function create(array $credentials): self
+    public static function create(#[\SensitiveParameter] array $credentials): self
     {
         $directory = config()->string('dbnova.paths.tmp');
         File::ensureDirectoryExists($directory, 0700);
@@ -48,7 +48,7 @@ final class DefaultsFile
      * @param  array{username: string, password: string}  $credentials
      * @return list<string>
      */
-    private static function options(array $credentials): array
+    private static function options(#[\SensitiveParameter] array $credentials): array
     {
         self::assertSingleLine($credentials['username'], 'username');
         self::assertSingleLine($credentials['password'], 'password');
@@ -81,7 +81,7 @@ final class DefaultsFile
      *
      * @throws DatabaseOperationException
      */
-    private static function assertSingleLine(string $value, string $what): void
+    private static function assertSingleLine(#[\SensitiveParameter] string $value, string $what): void
     {
         if (strpbrk($value, "\r\n\0") !== false) {
             throw new DatabaseOperationException(sprintf(
@@ -94,7 +94,7 @@ final class DefaultsFile
     /**
      * Quote an option value so characters like # and ; are taken literally.
      */
-    private static function quote(string $value): string
+    private static function quote(#[\SensitiveParameter] string $value): string
     {
         return '"'.str_replace(['\\', '"'], ['\\\\', '\\"'], $value).'"';
     }

@@ -148,7 +148,8 @@ describe('apply', function () {
     });
 
     test('renaming, creating and dropping a table say where to go next', function (array $change, string $class, string $redirect) {
-        $this->mock(MySQLConnector::class)->shouldReceive('connect')->andReturn(new PDO('sqlite::memory:'));
+        $this->mock(MySQLConnector::class)->shouldReceive('connect')->andReturn(new PDO('sqlite::memory:'))
+            ->shouldReceive('matchedUser')->andReturnUsing(fn () => auth()->user()?->username);
         $this->tables->shouldReceive('apply')
             ->withArgs(fn (TableRef $table, object $applied) => $applied instanceof $class)
             ->andReturn(new DdlResult(['…']));

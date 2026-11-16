@@ -55,8 +55,22 @@ class AuditLogger
             'table_name' => $table,
             'details' => $details === [] ? null : $details,
             'succeeded' => $failure === null,
-            'error' => $failure?->getMessage(),
+            'error' => $failure === null ? null : self::redact($failure->getMessage()),
             'ip_address' => $this->request->ip(),
         ]);
+    }
+
+    /**
+     * MySQL errors quote the offending SQL and values ("near 'IDENTIFIED BY 'pw''",
+     * "Duplicate entry 'alice@example.com'"). The audit log keeps the error's shape
+     * but never the quoted text, so passwords and row values are not stored.
+     */
+    public static function redact(string $message): string
+    {
+        // A syntax error quotes the rest of the statement, unescaped: drop all of it.
+        $message = (string) preg_replace("/near '.*' at line (\\d+)/s", "near '…' at line $1", $message);
+
+        // Then every remaining single- or double-quoted literal ('' escapes included).
+        return (string) preg_replace(["/'(?:[^']|'')*'/s", '/"(?:[^"]|"")*"/s'], ["'…'", '"…"'], $message);
     }
 }

@@ -58,6 +58,7 @@ test('the request is validated', function (array $payload, string $field) {
     'unknown operation' => [['operation' => 'drop', 'tables' => ['orders']], 'operation'],
     'no tables' => [['operation' => 'check', 'tables' => []], 'tables'],
     'a repeated table' => [['operation' => 'check', 'tables' => ['orders', 'orders']], 'tables.0'],
+    'repair without confirmation' => [['operation' => 'repair', 'tables' => ['orders']], 'confirm'],
     'too many tables' => [['operation' => 'check', 'tables' => array_map(fn (int $i): string => "t{$i}", range(1, 201))], 'tables'],
 ]);
 
@@ -71,7 +72,7 @@ test('read-only mode refuses changes with 403', function () {
 test('a refused statement is reported and audited as failed', function () {
     $this->tables->shouldReceive('maintain')->andThrow(new DatabaseOperationException('The table "nope" does not exist in "shop".'));
 
-    $this->postJson(route('maintenance.run', 'shop'), ['operation' => 'repair', 'tables' => ['nope']])
+    $this->postJson(route('maintenance.run', 'shop'), ['operation' => 'repair', 'tables' => ['nope'], 'confirm' => true])
         ->assertUnprocessable()
         ->assertJson(['message' => 'The table "nope" does not exist in "shop".']);
 

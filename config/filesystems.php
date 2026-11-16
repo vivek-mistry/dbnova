@@ -33,7 +33,7 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
+            'serve' => false, // DBNova never serves files from storage/app; downloads go through signed export routes.
             'throw' => false,
             'report' => false,
         ],

@@ -52,4 +52,6 @@ Append entries during and at the end of each phase. Use the format `Phase N — 
 - Phase 8 — `CHECK TABLE` can't be a server-side prepared statement, but OPTIMIZE/ANALYZE/REPAIR can. — Run maintenance with `PDO::query` on catalog-checked, quoted names.
 - Phase 8 — A new secondary index shows `INDEX_LENGTH = 0` until InnoDB's persistent statistics refresh. — Run `ANALYZE TABLE` before asserting sizes in tests.
 - Phase 8 — InnoDB's `DATA_FREE` is a few MB (free extents) even on a freshly built table. — Don't promise OPTIMIZE will reclaim it; label it "allocated but unused".
+- Phase 9 — Laravel's `throttle:N,1` keys on the signed-in user only, so every route using it shares one counter (edits used up the 5/min drop-database budget). — Always add a per-route prefix: `throttle:N,1,<route name>`. `RouteThrottleTest` enforces it.
+- Phase 9 — PHP exception traces keep call arguments, and Laravel logs the previous exception's trace. A failed PDO connect logged the password. — Mark every credential parameter `#[\SensitiveParameter]`.
 - Phase 0 — `mysql` on PATH is a shell alias. — Always resolve binaries from config, never from `PATH` lookups that rely on the interactive shell.

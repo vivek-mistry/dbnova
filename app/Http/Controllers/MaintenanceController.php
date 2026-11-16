@@ -30,6 +30,8 @@ class MaintenanceController extends Controller
             'operation' => ['required', Rule::enum(MaintenanceOperation::class)],
             'tables' => ['required', 'array', 'min:1', 'max:'.self::MAX_TABLES],
             'tables.*' => ['required', 'string', 'max:64', 'distinct'],
+            // MySQL warns that REPAIR can lose rows of a damaged MyISAM table (rule 12: confirm destructive actions).
+            'confirm' => ['exclude_unless:operation,repair', 'accepted'],
         ]);
 
         $operation = MaintenanceOperation::from($validated['operation']);

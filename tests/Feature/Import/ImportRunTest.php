@@ -219,6 +219,7 @@ describe('resetting the target', function () {
         $this->schema = fakeSchemaManager();
         $this->connector = $this->mock(MySQLConnector::class);
         $this->connector->shouldReceive('serverLabel')->andReturn('127.0.0.1:3306');
+        $this->connector->shouldReceive('matchedUser')->andReturnUsing(fn () => auth()->user()?->username);
     });
 
     test('drops and recreates the target with its collation after the name and password are confirmed', function () {

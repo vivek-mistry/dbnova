@@ -16,6 +16,7 @@ final readonly class CsvExportRequest
      * @param  bool  $spreadsheetSafe  Prefix text that a spreadsheet would run as a formula with a single quote.
      */
     public function __construct(
+        #[\SensitiveParameter]
         public array $credentials,
         public string $path,
         public ExportFormat $format,

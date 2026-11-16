@@ -7,6 +7,8 @@ DBNova is effectively a superuser console for a MySQL server. Its threat model a
 - Users sign in with a **MySQL username and password** (ADR 0008), which DBNova checks by connecting to the configured server. MySQL grants decide what they can do.
 - There are no app accounts. Registration, password reset, email verification, 2FA and passkeys are removed. Fortify login throttling (5/min per username + IP) is kept.
 - "Remember me" is not offered, because a remembered session would have no MySQL credentials.
+- **The account must match the name** (security review 9, MEDIUM-1). After connecting, `verify()` reads `CURRENT_USER()`; a login MySQL matched to a different account is refused. That covers an anonymous `''@host` account or a proxy user. Without the check, the anonymous account's password typed with the name "admin" would have opened admin's exports and history.
+- **Password guessing is limited per MySQL username:** 10 failures per minute (`AuthenticateMySQLUser::MAX_FAILURES_PER_MINUTE`). The limit sits inside `verify()`, so it covers login, Fortify password confirmation and every "re-enter your password" dialog (security review 9, MEDIUM-2). Fortify's login throttle (5/min per username + IP) still applies on top.
 - All app routes sit behind `auth` + `verified` middleware. A feature test asserts that every non-auth route requires auth.
 - Session lifetime is configurable.
 - Dropping a database requires typing its exact name **and** re-entering the MySQL password in the same dialog (`DropDatabaseRequest` checks the password against MySQL). The import "drop & recreate" action follows the same pattern. Fortify's `password.confirm` page is also MySQL-backed, for flows that redirect.
@@ -20,6 +22,10 @@ DBNova is effectively a superuser console for a MySQL server. Its threat model a
 - They're given to the CLI only through a temporary `--defaults-extra-file` (mode 0600, under `storage/app/dbnova/tmp`, deleted in `finally`). They're **never** put in argv (visible in `ps`) and never in `MYSQL_PWD` (deprecated).
 - Option files are read line by line, so a value containing CR, LF or NUL would start a new option. For example, the password `x⏎result-file=/path` makes mysqldump write over any file the worker can write. Quoting can't stop this. `DefaultsFile` therefore **refuses** such usernames, passwords, hosts and socket paths, without echoing the value, and login refuses them too. Any MySQL user can set such a password for themselves, so this is the real control. (Security review 7a, HIGH-1, verified against mysqldump 8.0.39.)
 - They're never logged, never serialized into job payloads (jobs hold only IDs), and never sent to the frontend.
+- **Stack traces:** PHP records call arguments in exception traces, and Laravel writes the trace of the "previous" exception to `laravel.log`. Every parameter that carries a password or a credentials array is therefore marked `#[\SensitiveParameter]`:
+    - `MySQLConnector::connect`, `MySQLConnection::useCredentials`, `AuthenticateMySQLUser::verify`, `MySQLCredentialStore::store`;
+    - `DefaultsFile`, `ProcessRunner` and the export/import request DTOs.
+    - Before this, a failed connect logged `connect('user', 'password', …)` (security review 9, HIGH-1). `tests/Feature/Security/CredentialLeakTest.php` formats real failures with Monolog and asserts the password is absent. INSTALL.md also recommends `zend.exception_ignore_args=On`.
 - Recommended setup: a dedicated MySQL user with the required grants (see INSTALL.md) rather than `root`.
 
 ## Injection
@@ -68,7 +74,7 @@ DBNova is effectively a superuser console for a MySQL server. Its threat model a
     - **Cancel** sends `KILL QUERY` only for the owner's own export, only while it is running, and only to the connection id stored on that export (never one from the request). It runs as the same MySQL account.
     - **Logging:** the audit log never stores a query's text. A failed query export is audited as "The query export failed." because MySQL errors quote the SQL. The statement is deleted from `export_jobs` when the file is deleted or expires.
     - **Spreadsheet formulas:** CSV is exact by default. The opt-in **Safe for spreadsheets** option (`options.spreadsheetSafe`) prefixes text starting with `=`, `+`, `-`, `@`, tab or CR with `'` (OWASP CSV injection guidance). Numeric strings such as DECIMAL `-12.50` are left alone. SQL-editor query exports are always exact.
-    - **Disk use:** a user may run at most 3 exports at once and keep at most `DBNOVA_MAX_KEPT_EXPORTS` (10) unexpired finished files; further exports are refused (429) until files are deleted or expire. This closes 7b LOW-2.
+    - **Disk use:** a user may run at most 3 exports at once and keep at most `DBNOVA_MAX_KEPT_EXPORTS` (10) unexpired finished files; further exports are refused (429) until files are deleted or expire. This closes 7b LOW-2. The cap check and the insert run under a per-user `Cache::lock`, so parallel requests can't all pass (review 9, LOW-3).
     - **Known limit:** a query still running in MySQL when its worker dies, or when recovery marks it interrupted, isn't killed; nobody holds credentials at that point. MySQL finishes it or the DBA kills it under Processes. The heartbeat lease is capped at 4 h.
 
 ## Server processes (Phase 8a)
@@ -79,7 +85,7 @@ DBNova is effectively a superuser console for a MySQL server. Its threat model a
 
 ## Table maintenance, audit viewer and preferences (Phase 8b)
 
-- **Maintenance** (`OPTIMIZE`, `ANALYZE`, `CHECK`, `REPAIR TABLE`):
+- **Maintenance** (`OPTIMIZE`, `ANALYZE`, `CHECK`, `REPAIR TABLE`). `REPAIR` needs `confirm: true`, because it can drop unreadable MyISAM rows (review 9, LOW-4).
     - Table names must be base tables in the catalog of that database before they are quoted into the statement. Views and unknown names are refused.
     - At most 200 tables per request, throttled at 30/min.
     - Read-only mode refuses everything except `CHECK`, which only reads.
@@ -98,7 +104,8 @@ DBNova is effectively a superuser console for a MySQL server. Its threat model a
 ## Web
 
 - CSRF on all state-changing requests (Laravel default, including chunk PUTs).
-- Rate limits on the login, upload-chunk and query-execute endpoints.
+- Every state-changing route has its own rate limit: `throttle:N,1,<route name>`. The prefix matters: Laravel's plain `throttle:N,1` keys on the user only, so all such routes would share one counter. `RouteThrottleTest` enforces both rules.
+- `local` storage has `'serve' => false`: DBNova never serves files from `storage/app`.
 - No user-controlled HTML is rendered. Grid cells are rendered as text.
 
 ## Read-only mode
@@ -107,7 +114,7 @@ DBNova is effectively a superuser console for a MySQL server. Its threat model a
 
 ## Audit log
 
-`audit_logs` (SQLite) records the actor (user + MySQL username), action, database, table, details, result (with the error) and IP. It covers every DDL, every row change from the grid, imports, exports and drops. **Row values are never stored**: row changes record column names and row counts only, because table data may be sensitive.
+`audit_logs` (SQLite) records the actor (user + MySQL username), action, database, table, details, result (with the error) and IP. Stored errors pass through `AuditLogger::redact()`, which replaces every quoted literal with `'…'` (and everything after `near '` in syntax errors), because MySQL errors quote SQL, passwords (`ALTER USER … IDENTIFIED BY`) and row values (`Duplicate entry '…'`) (security review 9, LOW-1). The user who ran the statement still sees the full error. It covers every DDL, every row change from the grid, imports, exports and drops. **Row values are never stored**: row changes record column names and row counts only, because table data may be sensitive.
 
 ## Review checklist
 

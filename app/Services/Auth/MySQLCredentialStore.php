@@ -16,7 +16,7 @@ class MySQLCredentialStore
 
     public function __construct(private Session $session) {}
 
-    public function store(string $username, string $password): void
+    public function store(string $username, #[\SensitiveParameter] string $password): void
     {
         $this->session->put(self::SESSION_KEY, Crypt::encryptString(json_encode([
             'username' => $username,

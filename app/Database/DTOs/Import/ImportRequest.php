@@ -16,6 +16,7 @@ final readonly class ImportRequest
      */
     public function __construct(
         public string $database,
+        #[\SensitiveParameter]
         public array $credentials,
         public ?string $sourceDatabase = null,
         public bool $speedMode = false,

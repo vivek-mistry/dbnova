@@ -14,8 +14,10 @@ use App\Models\ExportJob;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
 use App\Services\Auth\MySQLCredentialStore;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -84,6 +86,11 @@ class ExportController extends Controller
      * credentials are stored on the export (encrypted) until it starts.
      */
     public function store(Request $request, MySQLCredentialStore $credentialStore, AuditLogger $auditLogger): JsonResponse
+    {
+        return $this->oneStartAtATime($request, fn (): JsonResponse => $this->startTableExport($request, $credentialStore, $auditLogger));
+    }
+
+    private function startTableExport(Request $request, MySQLCredentialStore $credentialStore, AuditLogger $auditLogger): JsonResponse
     {
         $user = $this->user($request);
 
@@ -175,6 +182,11 @@ class ExportController extends Controller
      * again in the worker and write all of its rows as CSV.
      */
     public function storeQuery(Request $request, MySQLCredentialStore $credentialStore, AuditLogger $auditLogger): JsonResponse
+    {
+        return $this->oneStartAtATime($request, fn (): JsonResponse => $this->startQueryExport($request, $credentialStore, $auditLogger));
+    }
+
+    private function startQueryExport(Request $request, MySQLCredentialStore $credentialStore, AuditLogger $auditLogger): JsonResponse
     {
         $user = $this->user($request);
 
@@ -331,6 +343,23 @@ class ExportController extends Controller
         $power = $bytes > 0 ? min((int) floor(log($bytes, 1024)), count($units) - 1) : 0;
 
         return round($bytes / 1024 ** $power, 1).' '.$units[$power];
+    }
+
+    /**
+     * The caps are checked before the export row is inserted: parallel requests from one user
+     * must not all pass the check (security review 9, LOW-3).
+     *
+     * @param  callable(): JsonResponse  $start
+     */
+    private function oneStartAtATime(Request $request, callable $start): JsonResponse
+    {
+        $lock = Cache::lock('dbnova:export-start:'.$this->user($request)->id, 30);
+
+        try {
+            return $lock->block(10, $start);
+        } catch (LockTimeoutException) {
+            return response()->json(['message' => 'Another export is being started. Try again in a moment.'], 429);
+        }
     }
 
     /**

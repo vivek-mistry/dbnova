@@ -18,6 +18,7 @@ final readonly class ExportRequest
      */
     public function __construct(
         public string $database,
+        #[\SensitiveParameter]
         public array $credentials,
         public string $path,
         public ExportFormat $format = ExportFormat::Sql,

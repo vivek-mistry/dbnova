@@ -57,6 +57,11 @@ php artisan dbnova:install      # verifies PHP, binaries, MySQL reachability, st
 # Then open DBNova and sign in with a MySQL account (e.g. root or a dedicated user).
 ```
 
+## PHP settings
+
+- `zend.exception_ignore_args = On` (php.ini, production): exception traces then carry no call arguments. DBNova already marks password parameters `#[\SensitiveParameter]`; this setting also covers anything else.
+- `display_errors = Off` and `APP_DEBUG=false` in production.
+
 ## Web server
 
 - nginx + PHP-FPM, with the document root at `public/`.

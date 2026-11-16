@@ -26,7 +26,9 @@ test('the password is confirmed when MySQL accepts it', function () {
         ->shouldReceive('connect')
         ->once()
         ->with('root', 'Secret@123')
-        ->andReturn(new PDO('sqlite::memory:')));
+        ->andReturn(new PDO('sqlite::memory:'))
+        ->shouldReceive('matchedUser')
+        ->andReturn('root'));
 
     $response = $this->post(route('password.confirm.store'), ['password' => 'Secret@123']);
 

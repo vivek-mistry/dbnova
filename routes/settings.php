@@ -9,5 +9,5 @@ Route::middleware(['auth', EnsureMySQLCredentials::class])->group(function () {
 
     Route::inertia('settings/appearance', 'settings/Appearance')->name('appearance.edit');
     Route::get('settings/preferences', [PreferencesController::class, 'edit'])->name('preferences.edit');
-    Route::patch('settings/preferences', [PreferencesController::class, 'update'])->name('preferences.update');
+    Route::patch('settings/preferences', [PreferencesController::class, 'update'])->middleware('throttle:30,1,preferences.update')->name('preferences.update');
 });

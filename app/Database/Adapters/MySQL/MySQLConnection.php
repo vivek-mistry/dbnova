@@ -38,7 +38,7 @@ class MySQLConnection
      *
      * @param  array{username: string, password: string}  $credentials
      */
-    public function useCredentials(array $credentials): static
+    public function useCredentials(#[\SensitiveParameter] array $credentials): static
     {
         $this->explicitCredentials = $credentials;
         $this->pdo = null;

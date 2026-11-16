@@ -115,3 +115,9 @@ test('the dashboard polls the server counters as JSON', function () {
         'questions' => 2000, 'threadsConnected' => 5, 'maxConnections' => 151, 'bufferPoolPagesFree' => 1024,
     ]);
 });
+
+test('a thread id too large for PHP is not found rather than an error', function () {
+    $this->server->shouldNotReceive('kill');
+
+    $this->postJson('/processes/99999999999999999999/kill', ['mode' => 'query', 'confirm' => true])->assertNotFound();
+});

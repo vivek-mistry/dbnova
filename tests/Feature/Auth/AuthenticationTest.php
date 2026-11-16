@@ -1,9 +1,11 @@
 <?php
 
+use App\Actions\Fortify\AuthenticateMySQLUser;
 use App\Database\Adapters\MySQL\MySQLConnector;
 use App\Models\User;
 use App\Services\Auth\MySQLCredentialStore;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Validation\ValidationException;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function () {
@@ -20,7 +22,9 @@ function mySqlAcceptsLogin(string $username, string $password): void
         ->shouldReceive('connect')
         ->once()
         ->with($username, $password)
-        ->andReturn(new PDO('sqlite::memory:')));
+        ->andReturn(new PDO('sqlite::memory:'))
+        ->shouldReceive('matchedUser')
+        ->andReturn($username));
 }
 
 function mySqlRejectsLogin(PDOException $exception): void
@@ -158,4 +162,41 @@ test('users are rate limited', function () {
     ]);
 
     $response->assertTooManyRequests();
+});
+
+test('a login that MySQL matches to an anonymous account is refused', function () {
+    // e.g. ''@'localhost' exists and its password was typed together with the name "admin".
+    test()->mock(MySQLConnector::class, fn ($mock) => $mock
+        ->shouldReceive('connect')->once()->andReturn(new PDO('sqlite::memory:'))
+        ->shouldReceive('matchedUser')->andReturn(''));
+
+    $this->post(route('login.store'), ['username' => 'admin', 'password' => 'anon-secret'])->assertSessionHasErrors('username');
+
+    $this->assertGuest();
+    expect(User::query()->where('username', 'admin')->exists())->toBeFalse();
+});
+
+test('failed password checks are limited per MySQL username, wherever they come from', function () {
+    test()->mock(MySQLConnector::class, fn ($mock) => $mock
+        ->shouldReceive('connect')->times(AuthenticateMySQLUser::MAX_FAILURES_PER_MINUTE)
+        ->andThrow(new PDOException('SQLSTATE[HY000] [1045] Access denied', 1045)));
+    $verify = app(AuthenticateMySQLUser::class);
+
+    foreach (range(1, AuthenticateMySQLUser::MAX_FAILURES_PER_MINUTE) as $attempt) {
+        expect($verify->verify('root', "guess-{$attempt}"))->toBeFalse();
+    }
+
+    // The next guess is refused without asking MySQL at all.
+    expect(fn () => $verify->verify('root', 'guess-11'))->toThrow(ValidationException::class, 'Too many failed password attempts');
+});
+
+test('successful password checks do not count towards the limit', function () {
+    test()->mock(MySQLConnector::class, fn ($mock) => $mock
+        ->shouldReceive('connect')->andReturn(new PDO('sqlite::memory:'))
+        ->shouldReceive('matchedUser')->andReturn('root'));
+    $verify = app(AuthenticateMySQLUser::class);
+
+    foreach (range(1, AuthenticateMySQLUser::MAX_FAILURES_PER_MINUTE + 5) as $attempt) {
+        expect($verify->verify('root', 'right'))->toBeTrue();
+    }
 });

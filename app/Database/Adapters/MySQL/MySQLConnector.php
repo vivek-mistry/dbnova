@@ -23,7 +23,7 @@ class MySQLConnector
      *
      * @throws PDOException
      */
-    public function connect(string $username, string $password, array $options = []): PDO
+    public function connect(string $username, #[\SensitiveParameter] string $password, array $options = []): PDO
     {
         // PDO attributes are integer keys: array_replace keeps them, whereas `...` would renumber them.
         return new PDO($this->dsn(), $username, $password, array_replace([
@@ -56,6 +56,21 @@ class MySQLConnector
         }
 
         return config()->string('dbnova.connection.host').':'.config()->integer('dbnova.connection.port');
+    }
+
+    /**
+     * The user part of the account MySQL actually matched (CURRENT_USER()). It differs from
+     * the typed name when the login matched an anonymous ''@host account or a proxy.
+     *
+     * @throws PDOException
+     */
+    public function matchedUser(PDO $pdo): string
+    {
+        $statement = $pdo->query('SELECT CURRENT_USER()');
+        $account = $statement === false ? '' : (string) $statement->fetchColumn();
+        $at = strrpos($account, '@');
+
+        return $at === false ? $account : substr($account, 0, $at);
     }
 
     public static function isAccessDenied(PDOException $exception): bool
