@@ -111,6 +111,7 @@ class ExportDatabaseJob implements ShouldQueue
                         $export->database_name === '' ? null : $export->database_name,
                         $export->query === null ? ($export->tables[0] ?? null) : null,
                         $export->query,
+                        (bool) ($export->options['spreadsheetSafe'] ?? false),
                     ),
                     $onProgress,
                     function (int $connectionId): void {

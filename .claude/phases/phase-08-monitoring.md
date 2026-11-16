@@ -1,6 +1,6 @@
 # Phase 8 — Monitoring & advanced operations
 
-**Status:** review (8a committed as 8535d4d; 8b built, awaiting review)
+**Status:** done (8a 8535d4d, 8b aa0fe12)
 **Goal:** Visibility into the running server, plus maintenance operations.
 **New dependencies:** none. The user chose hand-built SVG charts over `apexcharts`.
 
@@ -57,7 +57,7 @@
 - Checked with headless Chrome screenshots (dark and light), including the kill dialog on a real running `SLEEP(40)`.
 - Tests: 623 passing against real MySQL. Integration tests find a CLI `SLEEP(30)`, stop its query (the client stays connected, exit 0) and kill its connection (the client exits non-zero). `composer ci:check` is green.
 
-### 8b — operations (2026-11-16, awaiting review)
+### 8b — operations (2026-11-16, committed aa0fe12)
 
 - **Size breakdown:** `TableInfo` gained `dataBytes`, `indexBytes` and `freeBytes` (`DATA_FREE`).
     - The database page shows a storage bar (data vs indexes, 2 px gap, legend with values) and per-table Data / Indexes / Free / Total columns.

@@ -94,6 +94,7 @@ class ExportController extends Controller
             'format' => ['required', Rule::enum(ExportFormat::class)],
             'content' => ['required_unless:format,csv,csv.gz', Rule::in(['both', 'structure', 'data'])],
             'includePrograms' => ['boolean'],
+            'spreadsheetSafe' => ['boolean'],
         ]);
 
         $database = $validated['database'];
@@ -118,8 +119,8 @@ class ExportController extends Controller
             }
         }
 
-        if ($this->activeExports($user) >= self::MAX_ACTIVE_EXPORTS) {
-            return response()->json(['message' => 'You already have '.self::MAX_ACTIVE_EXPORTS.' exports running. Wait for one to finish or cancel it.'], 429);
+        if (($refusal = $this->overLimit($user)) !== null) {
+            return $refusal;
         }
 
         $estimate = $this->adapter->exporter()->estimateBytes($database, $tables);
@@ -149,7 +150,9 @@ class ExportController extends Controller
             'database_name' => $database,
             'tables' => $tables === [] ? null : $tables,
             'format' => $format,
-            'options' => $format->isCsv() ? null : ['content' => $validated['content'], 'includePrograms' => $includePrograms],
+            'options' => $format->isCsv()
+                ? ['spreadsheetSafe' => (bool) ($validated['spreadsheetSafe'] ?? false)]
+                : ['content' => $validated['content'], 'includePrograms' => $includePrograms],
             'status' => ExportStatus::Queued,
             'file_name' => self::fileName($database, $tables, $format),
             'estimated_bytes' => $estimate,
@@ -179,6 +182,7 @@ class ExportController extends Controller
             'sql' => ['required', 'string', 'max:'.self::MAX_QUERY_LENGTH],
             'database' => ['nullable', 'string', 'max:64'],
             'format' => ['required', Rule::in([ExportFormat::Csv->value, ExportFormat::CsvGz->value])],
+            'spreadsheetSafe' => ['boolean'],
         ]);
 
         $statements = SqlStreamScanner::split($validated['sql']);
@@ -199,8 +203,8 @@ class ExportController extends Controller
             return $this->invalid('database', 'That database does not exist.');
         }
 
-        if ($this->activeExports($user) >= self::MAX_ACTIVE_EXPORTS) {
-            return response()->json(['message' => 'You already have '.self::MAX_ACTIVE_EXPORTS.' exports running. Wait for one to finish or cancel it.'], 429);
+        if (($refusal = $this->overLimit($user)) !== null) {
+            return $refusal;
         }
 
         $credentials = $credentialStore->get();
@@ -216,6 +220,7 @@ class ExportController extends Controller
             'database_name' => $database ?? '',
             'query' => $statements[0]->sql,
             'format' => $format,
+            'options' => ['spreadsheetSafe' => (bool) ($validated['spreadsheetSafe'] ?? false)],
             'status' => ExportStatus::Queued,
             'file_name' => self::fileName(($database ?: 'query').'-query', [], $format),
             'credentials' => $credentials,
@@ -326,6 +331,26 @@ class ExportController extends Controller
         $power = $bytes > 0 ? min((int) floor(log($bytes, 1024)), count($units) - 1) : 0;
 
         return round($bytes / 1024 ** $power, 1).' '.$units[$power];
+    }
+
+    /**
+     * Too many exports running, or too many finished files kept on disk (they expire after
+     * retention.export_file_hours, or the user deletes them on the Export page).
+     */
+    private function overLimit(User $user): ?JsonResponse
+    {
+        if ($this->activeExports($user) >= self::MAX_ACTIVE_EXPORTS) {
+            return response()->json(['message' => 'You already have '.self::MAX_ACTIVE_EXPORTS.' exports running. Wait for one to finish or cancel it.'], 429);
+        }
+
+        $maxKept = config()->integer('dbnova.limits.max_kept_exports');
+        $kept = ExportJob::query()->whereBelongsTo($user)->where('status', ExportStatus::Completed)->where('expires_at', '>', now())->count();
+
+        if ($maxKept > 0 && $kept >= $maxKept) {
+            return response()->json(['message' => "You are keeping {$kept} finished exports (the limit is {$maxKept}). Delete ones you have downloaded, then start this export again."], 429);
+        }
+
+        return null;
     }
 
     private function activeExports(User $user): int

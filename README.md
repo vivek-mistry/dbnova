@@ -6,7 +6,7 @@ A self-hosted MySQL manager: a faster, more trustworthy alternative to phpMyAdmi
 
 DBNova manages **one MySQL server** running on the same machine or VPS. You sign in with a MySQL account, and that account's grants decide what you can do. It's built for everyday browsing and for importing and exporting production-sized databases (10 GB and more) without running out of memory.
 
-> **Status:** in active development. Phases 0–7 (through the import and export engines) are done, and monitoring (Phase 8) is in review. Next up: hardening and a release with Docker support. See [Roadmap](#roadmap).
+> **Status:** in active development. Phases 0–8 (through import/export and monitoring) are done. Next up: hardening, then a release with Docker support. See [Roadmap](#roadmap).
 
 ## Features
 
@@ -27,7 +27,7 @@ DBNova manages **one MySQL server** running on the same machine or VPS. You sign
     - A queued import that reports honest progress (bytes sent, never "% committed"), with cancel, recovery and MySQL errors at the line they occur in your file.
 - **Exports.**
     - **SQL dumps:** a whole database or chosen tables to `.sql` or `.sql.gz` via `mysqldump`, in a consistent snapshot, ready to re-import anywhere.
-    - **CSV:** one table, or the full result of a SQL editor query, to `.csv` or `.csv.gz`. NULL stays distinguishable from empty text, and query exports are read-only.
+    - **CSV:** one table, or the full result of a SQL editor query, to `.csv` or `.csv.gz`. NULL stays distinguishable from empty text, query exports are read-only, and an optional "safe for spreadsheets" mode neutralises formulas.
     - Exports run in a background job, with progress and cancel, and are downloaded through short-lived signed links.
 - **Monitoring and maintenance.**
     - A live process list with Stop query / Kill connection, plus server variables and status counters.
@@ -69,15 +69,14 @@ touch database/database.sqlite && php artisan migrate
 npm install && npm run build
 ```
 
-Point DBNova at your server and client binaries in `.env`:
+Point DBNova at your server and client binaries in `.env` (the full list is under [Configuration](#configuration)):
 
 ```dotenv
+APP_NAME=DBNova
 DBNOVA_DB_HOST=127.0.0.1
 DBNOVA_DB_PORT=3306
-DBNOVA_DB_SOCKET=
-DBNOVA_MYSQL_BIN=/usr/bin/mysql            # full paths: shell aliases are not visible to PHP
+DBNOVA_MYSQL_BIN=/usr/bin/mysql            # full paths: `command -v mysql mysqldump`
 DBNOVA_MYSQLDUMP_BIN=/usr/bin/mysqldump
-DBNOVA_READ_ONLY=false
 ```
 
 `.env` only says **where** the server is. It never holds a MySQL username or password.
@@ -91,9 +90,61 @@ php artisan queue:work --queue=imports,exports,default       # imports and expor
 php artisan schedule:work                                    # recovery and cleanup (cron: schedule:run every minute)
 ```
 
-Open the app and sign in with a MySQL account. A dedicated MySQL user is recommended over `root`.
+Open the app and sign in with a MySQL account. A dedicated MySQL user is recommended over `root` (see below).
 
 Production setup (nginx, supervisor, PHP limits) is described in [`.claude/docs/INSTALL.md`](.claude/docs/INSTALL.md).
+
+## Configuration
+
+### Recommended setup checklist
+
+1. **Binary paths.** Set `DBNOVA_MYSQL_BIN` and `DBNOVA_MYSQLDUMP_BIN` to real files, not shell aliases. Find them with `command -v mysql mysqldump`. Common paths:
+
+    | Install                  | Path                                               |
+    | ------------------------ | -------------------------------------------------- |
+    | Linux packages           | `/usr/bin/mysql`                                   |
+    | macOS (Oracle installer) | `/usr/local/mysql/bin/mysql`                       |
+    | Homebrew                 | `/opt/homebrew/bin/mysql`                          |
+    | MAMP                     | `/Applications/MAMP/Library/bin/mysql80/bin/mysql` |
+
+    The System page shows the version each binary reports.
+
+2. **A dedicated MySQL account** for day-to-day work:
+
+    ```sql
+    CREATE USER 'dbnova'@'localhost' IDENTIFIED BY 'a-long-random-password';
+    GRANT ALL PRIVILEGES ON *.* TO 'dbnova'@'localhost';    -- full manager
+    -- read-only viewer instead: GRANT SELECT, SHOW VIEW, PROCESS ON *.* TO …; and DBNOVA_READ_ONLY=true
+    ```
+
+    Accounts with the global `CREATE USER` privilege (such as root) see every user's entries in the audit log. Other accounts see only their own.
+
+3. **Run a queue worker and the scheduler.** Imports and exports run in the worker. Recovery and cleanup run on the scheduler. Without them, imports and exports stay "queued".
+4. **Leave free disk space:** about 2× your largest import, plus your export files. DBNova refuses work that would leave less than `DBNOVA_MIN_FREE_DISK_BYTES` free.
+5. **Serve it over HTTPS** and keep it off the public internet where you can (VPN, IP allow-list).
+6. **Run `php artisan dbnova:install`** to check PHP extensions, the binaries, the MySQL connection, storage and the worker.
+
+### Settings (`.env`)
+
+| Setting                                                   | Default                  | What it does                                                                     |
+| --------------------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------- |
+| `DBNOVA_DB_HOST` / `DBNOVA_DB_PORT` / `DBNOVA_DB_SOCKET`  | `127.0.0.1` / `3306` / – | Where the managed MySQL server is. A socket path takes precedence over TCP.      |
+| `DBNOVA_MYSQL_BIN` / `DBNOVA_MYSQLDUMP_BIN`               | `/usr/bin/…`             | Full paths to the client tools. Required for imports and exports.                |
+| `DBNOVA_READ_ONLY`                                        | `false`                  | Refuse every change to the server. Browsing, `SELECT` and exports still work.    |
+| `DBNOVA_PAGE_SIZE` / `DBNOVA_MAX_PAGE_SIZE`               | `100` / `1000`           | Rows per page in the table browser: the default, and the most a user may choose. |
+| `DBNOVA_QUERY_ROW_CAP` / `DBNOVA_MAX_QUERY_ROW_CAP`       | `1000` / `10000`         | Rows the SQL editor shows. Use the CSV export for full results.                  |
+| `DBNOVA_QUERY_TIMEOUT_MS` / `DBNOVA_MAX_QUERY_TIMEOUT_MS` | `30000` / `300000`       | MySQL stops a `SELECT` after this long (`max_execution_time`).                   |
+| `DBNOVA_MAX_UPLOAD_BYTES`                                 | 100 GB                   | Largest import file.                                                             |
+| `DBNOVA_MIN_FREE_DISK_BYTES`                              | 5 GB                     | Free disk that imports and exports must leave.                                   |
+| `DBNOVA_EXPORT_FILE_HOURS` / `DBNOVA_EXPORT_LINK_MINUTES` | `24` / `60`              | How long export files are kept, and how long a download link works.              |
+| `DBNOVA_MAX_KEPT_EXPORTS`                                 | `10`                     | Finished export files one user may keep at once (`0` = no limit).                |
+| `DBNOVA_TEST_DB_USERNAME` / `…_PASSWORD`                  | –                        | Optional test account for the integration tests.                                 |
+
+Each user can lower or raise the page size, row cap and query timeout for their own account under **Settings → Preferences**, up to the maximums above. Imports and exports always use the `.env` values. All settings, with comments, are in [`.env.example`](.env.example) and [`config/dbnova.php`](config/dbnova.php).
+
+### CSV exports and spreadsheets
+
+CSV files are exact copies of the data by default. If the data comes from untrusted users and someone will open the file by double-clicking it, tick **Safe for spreadsheets**: text starting with `=`, `+`, `-` or `@` gets a leading `'`, so Excel, Numbers and Google Sheets don't run it as a formula. Numbers are never changed.
 
 ## Testing
 
@@ -122,7 +173,7 @@ To generate stress data, use `php artisan dbnova:stress:seed-table` (a 10M-row t
 | 0–5   | Architecture, foundation, explorer, table browser, schema, SQL editor | done    |
 | 6     | Large import engine                                                   | done    |
 | 7     | Export engine: SQL dumps and CSV                                      | done    |
-| 8     | Monitoring: process list, variables, charts, table maintenance        | review  |
+| 8     | Monitoring: process list, variables, charts, table maintenance        | done    |
 | 9     | Hardening and stress testing                                          | planned |
 | 10    | Release, Docker Compose, install guide                                | planned |
 

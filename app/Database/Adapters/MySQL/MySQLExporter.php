@@ -133,11 +133,11 @@ class MySQLExporter implements ExporterInterface
             // MySQL has started sending rows: report in (ends the heartbeat lease, notices a cancel).
             $onProgress(0, 0, 0);
 
-            $writer->write(self::csvLine($this->columnNames($pdoStatement)));
+            $writer->write(self::csvLine($this->columnNames($pdoStatement), $request->spreadsheetSafe));
             $buffer = '';
 
             while (($row = $pdoStatement->fetch(PDO::FETCH_NUM)) !== false) {
-                $buffer .= self::csvLine($row);
+                $buffer .= self::csvLine($row, $request->spreadsheetSafe);
                 $rows++;
 
                 if (strlen($buffer) >= self::CSV_FLUSH_BYTES || $rows % self::CSV_PROGRESS_ROWS === 0) {
@@ -309,9 +309,14 @@ class MySQLExporter implements ExporterInterface
      * quoted, so an empty string ("") stays distinguishable from NULL.
      * Binary values (not valid UTF-8) are written as 0x-prefixed hex.
      *
+     * In spreadsheet-safe mode, text a spreadsheet would treat as a formula
+     * (starting with = + - @, tab or CR) gets a leading single quote, as OWASP
+     * recommends. Numbers, including DECIMAL values PDO returns as strings, are
+     * left alone, so "-12.50" stays a number.
+     *
      * @param  array<int, mixed>  $values
      */
-    public static function csvLine(array $values): string
+    public static function csvLine(array $values, bool $spreadsheetSafe = false): string
     {
         $fields = [];
 
@@ -320,16 +325,24 @@ class MySQLExporter implements ExporterInterface
                 $value === null => '',
                 is_int($value), is_float($value) => (string) $value,
                 is_bool($value) => $value ? '1' : '0',
-                default => '"'.str_replace('"', '""', self::csvText((string) $value)).'"',
+                default => '"'.str_replace('"', '""', self::csvText((string) $value, $spreadsheetSafe)).'"',
             };
         }
 
         return implode(',', $fields)."\r\n";
     }
 
-    private static function csvText(string $value): string
+    private static function csvText(string $value, bool $spreadsheetSafe): string
     {
-        return mb_check_encoding($value, 'UTF-8') ? $value : '0x'.bin2hex($value);
+        if (! mb_check_encoding($value, 'UTF-8')) {
+            return '0x'.bin2hex($value);
+        }
+
+        if ($spreadsheetSafe && $value !== '' && strpbrk($value[0], "=+-@\t\r") !== false && ! is_numeric($value)) {
+            return "'".$value;
+        }
+
+        return $value;
     }
 
     /**

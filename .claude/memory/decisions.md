@@ -55,3 +55,9 @@ Newest entries go at the bottom. Use the format `YYYY-MM-DD — Decision — Why
     - **Maintenance:** runs synchronously (`set_time_limit(0)`); CHECK is allowed in read-only mode and not audited.
     - **Why:** there is no admin role in DBNova; CREATE USER already implies control over every account. The config override needs no plumbing through adapters. Maintenance results are short rows, and OPTIMIZE progress is visible under Processes.
     - phase-08-monitoring.md, SECURITY.md
+- 2026-11-16 — Open items closed:
+    - **CSV:** an opt-in "Safe for spreadsheets" option (prefix `'`, numbers untouched). It is off by default and not offered for SQL-editor query exports.
+    - **Kept exports:** `DBNOVA_MAX_KEPT_EXPORTS` (10) refuses new exports instead of deleting old files silently.
+    - **Brand:** the sidebar and page titles always say "DBNova", whatever `APP_NAME` is.
+    - **Why:** the user asked to "fix open things" with recommended defaults. Refusing is safer than deleting files the user may not have downloaded yet.
+    - SECURITY.md, README Configuration

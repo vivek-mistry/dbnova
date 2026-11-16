@@ -1,17 +1,13 @@
 # DBNova — Current Task
 
-**Current phase:** Phase 8 — Monitoring & advanced operations (8a committed; 8b built, awaiting review)
-**Phase file:** [.claude/phases/phase-08-monitoring.md](.claude/phases/phase-08-monitoring.md)
-**Status:** Review (8b)
+**Current phase:** Phase 9 — Hardening & stress testing
+**Phase file:** [.claude/phases/phase-09-hardening.md](.claude/phases/phase-09-hardening.md)
+**Status:** Starting
 **Branch:** `phase/00-architecture` (all phases so far)
 
 ## Now
 
-- Review 8b in the browser:
-    - A database page: storage bar, the Data/Indexes/Free columns, and tick tables → Maintenance → Analyze / Optimize / Check / Repair.
-    - Audit log in the sidebar, with filters.
-    - Settings → Preferences: rows per page, SQL row limit, query timeout.
-- Then Phase 9: hardening and stress testing.
+- Phase 9: start (see the phase file)
 
 ## Done
 
@@ -23,6 +19,7 @@
 - Phase 5 — SQL editor (CodeMirror, multi-statement runs, row cap, cancel, history/saved queries)
 - Phase 6 — Large import engine (chunked resumable uploads, streaming preflight, queued import with cancel/recovery; 2 GB in 117 s, flat memory)
 - Phase 7 — Export engine (SQL dumps and CSV; one statement per connection call after security review 7b)
+- Phase 8 — Monitoring (process list with kill, variables/status, live charts, table maintenance, size breakdown, audit viewer, per-user preferences)
 
 ## Test environment (local MySQL)
 
@@ -32,8 +29,4 @@
 
 ## Blocked / waiting on user
 
-- Approve the 8b commit
-- Optional: an opt-in "safe for spreadsheets" CSV mode (escapes = + - @), yes or no
-
-- Decide on LOW-2: a cap on completed exports kept per user (e.g. 10 files or N GB), or leave as is
-- Add `DBNOVA_MYSQL_BIN=/usr/local/mysql/bin/mysql` and `DBNOVA_MYSQLDUMP_BIN=/usr/local/mysql/bin/mysqldump` to `.env`
+- Your local `.env`: set `DBNOVA_MYSQL_BIN=/usr/local/mysql/bin/mysql` and `DBNOVA_MYSQLDUMP_BIN=/usr/local/mysql/bin/mysqldump` (Claude may not edit `.env`)

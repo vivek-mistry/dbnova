@@ -53,6 +53,7 @@ const filter = ref('');
 const format = ref<ExportFormat>('sql.gz');
 const content = ref<ExportContent>('both');
 const includePrograms = ref(true);
+const spreadsheetSafe = ref(false);
 const csvTable = ref(props.table ?? '');
 const isCsv = computed(
     () => format.value === 'csv' || format.value === 'csv.gz',
@@ -163,6 +164,7 @@ async function startExport(): Promise<void> {
         format: format.value,
         content: content.value,
         includePrograms: includePrograms.value,
+        spreadsheetSafe: isCsv.value && spreadsheetSafe.value,
     }));
 
     try {
@@ -363,11 +365,29 @@ const selectClass =
                 <span class="text-xs text-muted-foreground">
                     UTF-8 with a header row. NULL is an empty field and text is
                     always quoted, so empty text stays "". Binary values are
-                    written as hex (0x…). Values are written exactly as stored:
-                    if the data comes from untrusted users, open the file in a
-                    spreadsheet with Data → From Text rather than
-                    double-clicking it, since cells starting with = + - @ can
-                    run as formulas.
+                    written as hex (0x…).
+                </span>
+            </label>
+
+            <label
+                v-if="source !== '' && isCsv"
+                class="flex items-start gap-2 text-sm"
+            >
+                <Checkbox
+                    v-model="spreadsheetSafe"
+                    class="mt-0.5"
+                    data-test="export-spreadsheet-safe"
+                />
+                <span class="grid gap-0.5">
+                    <span class="font-medium">Safe for spreadsheets</span>
+                    <span class="text-xs text-muted-foreground">
+                        Text starting with = + - @ gets a leading ' so Excel,
+                        Numbers or Google Sheets show it instead of running it
+                        as a formula. Use it when the data comes from untrusted
+                        users and the file will be double-clicked. Leave it off
+                        for an exact copy (for re-importing or other tools).
+                        Numbers are never changed.
+                    </span>
                 </span>
             </label>
 

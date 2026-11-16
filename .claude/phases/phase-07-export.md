@@ -55,7 +55,7 @@
 - **Security review 7a** (dbnova-security-reviewer):
     - **HIGH-1:** a CR/LF in the MySQL password injected options into the `--defaults-extra-file`, so `result-file=` let mysqldump overwrite any file the worker can write. This was verified on 8.0.39, and the code is shared with Phase 6 imports. **Fixed:** `DefaultsFile` refuses CR/LF/NUL in every value, and login refuses them, with tests.
     - **LOW-1:** a late finish after recovery could audit `export.completed` for an interrupted export. **Fixed:** the audit only runs when the status update applied, and the file is deleted otherwise. Tested.
-    - **LOW-2** (not fixed, needs a decision): there's no per-user cap on _completed_ exports held for 24 h. One user can keep the disk near `min_free_disk_bytes`.
+    - **LOW-2** (fixed 2026-11-16: `DBNOVA_MAX_KEPT_EXPORTS`, default 10): there's no per-user cap on _completed_ exports held for 24 h. One user can keep the disk near `min_free_disk_bytes`.
     - **LOW-3:** no rate limit on cancel/destroy (owner-scoped, harmless).
     - Everything else was found sound: argv after `--`, credentials, signed downloads, filenames, paths, cleanup, read-only, XSS.
 - Tests: 556 passing against real MySQL (57 skip without it). `composer ci:check` is green.

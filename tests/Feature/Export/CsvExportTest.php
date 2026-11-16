@@ -1,5 +1,6 @@
 <?php
 
+use App\Database\Adapters\MySQL\MySQLExporter;
 use App\Database\Contracts\DatabaseAdapterInterface;
 use App\Database\Contracts\ExporterInterface;
 use App\Database\DTOs\DatabaseInfo;
@@ -56,8 +57,37 @@ describe('starting', function () {
             ->assertCreated()->assertJson(['source' => 'table', 'format' => 'csv.gz', 'tables' => ['orders']]);
 
         expect(ExportJob::query()->sole())
-            ->options->toBeNull()
+            ->options->toBe(['spreadsheetSafe' => false])
             ->file_name->toMatch('/^shop-orders-\d{8}-\d{6}\.csv\.gz$/');
+    });
+
+    test('spreadsheet-safe mode is an opt-in option on table and query exports', function () {
+        $this->postJson(route('exports.store'), ['database' => 'shop', 'tables' => ['orders'], 'format' => 'csv', 'spreadsheetSafe' => true])->assertCreated();
+        $this->postJson(route('exports.query'), ['sql' => 'SELECT 1', 'format' => 'csv', 'spreadsheetSafe' => true])->assertCreated();
+
+        expect(ExportJob::query()->pluck('options')->all())->toBe([['spreadsheetSafe' => true], ['spreadsheetSafe' => true]]);
+    });
+
+    test('finished files a user keeps are capped; deleting one makes room', function () {
+        config(['dbnova.limits.max_kept_exports' => 2]);
+        $kept = ExportJob::factory()->for($this->user)->count(2)->create(['status' => ExportStatus::Completed, 'expires_at' => now()->addHour()]);
+        ExportJob::factory()->for($this->user)->create(['status' => ExportStatus::Completed, 'expires_at' => now()->subMinute()]);
+        ExportJob::factory()->create(['status' => ExportStatus::Completed, 'expires_at' => now()->addHour()]);
+
+        $this->postJson(route('exports.store'), ['database' => 'shop', 'tables' => ['orders'], 'format' => 'csv'])
+            ->assertStatus(429)
+            ->assertJsonPath('message', 'You are keeping 2 finished exports (the limit is 2). Delete ones you have downloaded, then start this export again.');
+        $this->postJson(route('exports.query'), ['sql' => 'SELECT 1', 'format' => 'csv'])->assertStatus(429);
+
+        $this->deleteJson(route('exports.destroy', $kept[0]->id))->assertSuccessful();
+        $this->postJson(route('exports.store'), ['database' => 'shop', 'tables' => ['orders'], 'format' => 'csv'])->assertCreated();
+    });
+
+    test('a kept-files limit of 0 means no limit', function () {
+        config(['dbnova.limits.max_kept_exports' => 0]);
+        ExportJob::factory()->for($this->user)->count(3)->create(['status' => ExportStatus::Completed, 'expires_at' => now()->addHour()]);
+
+        $this->postJson(route('exports.store'), ['database' => 'shop', 'tables' => ['orders'], 'format' => 'csv'])->assertCreated();
     });
 
     test('a SQL editor result is queued as a CSV export of its single read-only statement', function () {
@@ -175,6 +205,16 @@ describe('the job', function () {
         expect($export->refresh())->status->toBe(ExportStatus::Completed)->rows_written->toBe(3)->mysql_connection_id->toBeNull();
     });
 
+    test('the spreadsheet-safe option reaches the exporter', function () {
+        $export = ($this->queued)(['format' => ExportFormat::Csv, 'tables' => ['orders'], 'options' => ['spreadsheetSafe' => true]]);
+
+        $this->exporter->shouldReceive('exportCsv')->once()
+            ->withArgs(fn (CsvExportRequest $request) => $request->spreadsheetSafe)
+            ->andReturn(new ExportResult(true, 100, 40, rowsWritten: 3));
+
+        ($this->runJob)($export);
+    });
+
     test('a query export passes the statement and takes a heartbeat lease while MySQL prepares the first row', function () {
         config(['dbnova.export_query_lease_seconds' => 600]);
         $export = ($this->queued)(['format' => ExportFormat::Csv, 'query' => 'SELECT 1', 'database_name' => '']);
@@ -244,4 +284,13 @@ describe('the job', function () {
 
         expect($export->refresh())->status->toBe(ExportStatus::Failed)->last_error->toContain('Unknown column');
     });
+});
+
+test('spreadsheet-safe CSV neutralises formulas but keeps numbers and exact mode untouched', function () {
+    $row = ['=HYPERLINK("http://x")', '+1+1', '-2+3', '@SUM(A1)', "\tTAB", '-12.50', '+44', 'plain', '', null, -5];
+
+    expect(MySQLExporter::csvLine($row, spreadsheetSafe: true))
+        ->toBe("\"'=HYPERLINK(\"\"http://x\"\")\",\"'+1+1\",\"'-2+3\",\"'@SUM(A1)\",\"'\tTAB\",\"-12.50\",\"+44\",\"plain\",\"\",,-5\r\n")
+        ->and(MySQLExporter::csvLine($row))
+        ->toBe("\"=HYPERLINK(\"\"http://x\"\")\",\"+1+1\",\"-2+3\",\"@SUM(A1)\",\"\tTAB\",\"-12.50\",\"+44\",\"plain\",\"\",,-5\r\n");
 });

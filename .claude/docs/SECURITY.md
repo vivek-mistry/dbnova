@@ -67,7 +67,8 @@ DBNova is effectively a superuser console for a MySQL server. Its threat model a
     - The worker also runs `SET SESSION TRANSACTION READ ONLY` plus `START TRANSACTION READ ONLY`, and resets the session afterwards.
     - **Cancel** sends `KILL QUERY` only for the owner's own export, only while it is running, and only to the connection id stored on that export (never one from the request). It runs as the same MySQL account.
     - **Logging:** the audit log never stores a query's text. A failed query export is audited as "The query export failed." because MySQL errors quote the SQL. The statement is deleted from `export_jobs` when the file is deleted or expires.
-    - **Spreadsheet formulas:** CSV is exact, so cells starting with `=`, `+`, `-` or `@` are not escaped. The Export page tells users to open untrusted data with Data → From Text instead of double-clicking it.
+    - **Spreadsheet formulas:** CSV is exact by default. The opt-in **Safe for spreadsheets** option (`options.spreadsheetSafe`) prefixes text starting with `=`, `+`, `-`, `@`, tab or CR with `'` (OWASP CSV injection guidance). Numeric strings such as DECIMAL `-12.50` are left alone. SQL-editor query exports are always exact.
+    - **Disk use:** a user may run at most 3 exports at once and keep at most `DBNOVA_MAX_KEPT_EXPORTS` (10) unexpired finished files; further exports are refused (429) until files are deleted or expire. This closes 7b LOW-2.
     - **Known limit:** a query still running in MySQL when its worker dies, or when recovery marks it interrupted, isn't killed; nobody holds credentials at that point. MySQL finishes it or the DBA kills it under Processes. The heartbeat lease is capped at 4 h.
 
 ## Server processes (Phase 8a)

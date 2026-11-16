@@ -28,6 +28,8 @@ For a read-only setup, grant `SELECT, SHOW VIEW, PROCESS` only and set `DBNOVA_R
 
 ## Environment (`.env`)
 
+The full annotated list is in `.env.example`, and the README's "Configuration" section has a table. The minimum is:
+
 ```
 APP_NAME=DBNova
 DB_CONNECTION=sqlite              # internal app DB — NOT the managed server
@@ -36,10 +38,12 @@ QUEUE_CONNECTION=database
 DBNOVA_DB_HOST=127.0.0.1
 DBNOVA_DB_PORT=3306
 DBNOVA_DB_SOCKET=
-DBNOVA_MYSQL_BIN=/usr/bin/mysql
+DBNOVA_MYSQL_BIN=/usr/bin/mysql            # `command -v mysql`; never a shell alias
 DBNOVA_MYSQLDUMP_BIN=/usr/bin/mysqldump
 DBNOVA_READ_ONLY=false
 ```
+
+The user-adjustable limits (`DBNOVA_PAGE_SIZE`, `DBNOVA_QUERY_ROW_CAP` and `DBNOVA_QUERY_TIMEOUT_MS`) each have a `DBNOVA_MAX_*` ceiling. `DBNOVA_MAX_KEPT_EXPORTS` caps the finished export files one user may keep.
 
 ## Install steps
 

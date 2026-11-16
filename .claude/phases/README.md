@@ -12,7 +12,7 @@ Status values: `not started` · `in progress` · `review` · `done`. Only **one*
 | 5   | SQL editor                                | done        | [phase-05-sql-editor.md](phase-05-sql-editor.md)             |
 | 6   | Large import engine                       | done        | [phase-06-import.md](phase-06-import.md)                     |
 | 7   | Export engine                             | done        | [phase-07-export.md](phase-07-export.md)                     |
-| 8   | Monitoring & advanced operations          | review      | [phase-08-monitoring.md](phase-08-monitoring.md)             |
+| 8   | Monitoring & advanced operations          | done        | [phase-08-monitoring.md](phase-08-monitoring.md)             |
 | 9   | Hardening & stress testing                | not started | [phase-09-hardening.md](phase-09-hardening.md)               |
 | 10  | Release & self-hosted install             | not started | [phase-10-release.md](phase-10-release.md)                   |
 

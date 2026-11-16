@@ -68,6 +68,8 @@ return [
         'min_free_disk_bytes' => (int) env('DBNOVA_MIN_FREE_DISK_BYTES', 5 * 1024 * 1024 * 1024),
         // A schema change that would copy (and lock) a table with more rows than this needs explicit confirmation.
         'locking_ddl_confirm_rows' => (int) env('DBNOVA_LOCKING_DDL_CONFIRM_ROWS', 1_000_000),
+        // Finished export files one user may keep at once (0 = no limit). Each file is deleted after retention.export_file_hours.
+        'max_kept_exports' => (int) env('DBNOVA_MAX_KEPT_EXPORTS', 10),
 
         // Users may change page_size, query_row_cap and query_timeout_ms under Settings → Preferences,
         // up to these maximums. The values above are the defaults.
