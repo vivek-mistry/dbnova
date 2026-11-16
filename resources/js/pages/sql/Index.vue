@@ -27,6 +27,8 @@ import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
 import { formatNumber } from '@/lib/format';
 import { httpErrorMessage } from '@/lib/httpError';
+import { modifierKey } from '@/lib/platform';
+import { uuid } from '@/lib/uuid';
 import {
     cancel as cancelRoute,
     index,
@@ -63,6 +65,9 @@ defineOptions({
 
 const page = usePage();
 const editor = ref<InstanceType<typeof SqlEditor> | null>(null);
+
+/** "⌘ + Enter" on a Mac, "Ctrl + Enter" on Windows and Linux (both keys work everywhere). */
+const runShortcut = `${modifierKey()} + Enter`;
 
 const sql = ref(props.initialSql);
 const database = ref(props.database ?? '');
@@ -159,7 +164,7 @@ async function run(confirmDestructive = false): Promise<void> {
 
     error.value = null;
     destructive.value = [];
-    runId.value = crypto.randomUUID();
+    runId.value = uuid();
     runHttp.transform(() => ({
         sql: text,
         database: database.value || null,
@@ -306,7 +311,8 @@ const selectClass =
                     Cancel
                 </Button>
                 <span class="text-xs text-muted-foreground">
-                    Ctrl/⌘ + Enter runs the selection, or everything. Up to
+                    <kbd class="font-sans">{{ runShortcut }}</kbd> runs the
+                    selection, or everything. Up to
                     {{ formatNumber(rowCap) }} rows per result; SELECTs stop
                     after {{ timeoutSeconds }} s.
                     <template v-if="page.props.dbnova.readOnly">
