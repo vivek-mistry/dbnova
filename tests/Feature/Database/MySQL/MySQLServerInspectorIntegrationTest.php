@@ -129,7 +129,14 @@ test('variables, status and metrics read real values', function () {
 });
 
 test('global privileges are read for the signed-in account', function () {
-    // The test account is limited to dbnova_test databases: it holds no global CREATE USER.
-    expect($this->inspector->hasGlobalPrivilege('CREATE USER'))->toBeFalse()
-        ->and($this->inspector->hasGlobalPrivilege('USAGE'))->toBeTrue();
+    // Works for any test account: root (CI) holds CREATE USER, a limited account (dbnova_test) does not.
+    $globalGrants = collect($this->connection->select('SHOW GRANTS'))
+        ->map(fn (array $row): string => (string) reset($row))
+        ->filter(fn (string $grant): bool => str_contains($grant, ' ON *.* '))
+        ->implode("\n");
+    $holdsCreateUser = str_contains($globalGrants, 'ALL PRIVILEGES') || str_contains($globalGrants, 'CREATE USER');
+
+    expect($this->inspector->hasGlobalPrivilege('CREATE USER'))->toBe($holdsCreateUser)
+        ->and($this->inspector->hasGlobalPrivilege('create user'))->toBe($holdsCreateUser)
+        ->and($this->inspector->hasGlobalPrivilege('NOT A PRIVILEGE'))->toBeFalse();
 });
