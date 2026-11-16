@@ -1,0 +1,95 @@
+<?php
+
+namespace App\Database\Adapters\MySQL;
+
+use PDO;
+use PDOException;
+
+/**
+ * Opens raw PDO connections to the managed MySQL server using the
+ * host settings from config/dbnova.php and the signed-in user's account.
+ */
+class MySQLConnector
+{
+    /**
+     * MySQL error codes meaning the server rejected the username or password.
+     *
+     * @var list<int>
+     */
+    public const array ACCESS_DENIED_CODES = [1045, 1698];
+
+    /**
+     * @param  array<int, mixed>  $options  Extra PDO attributes.
+     *
+     * @throws PDOException
+     */
+    public function connect(string $username, #[\SensitiveParameter] string $password, array $options = []): PDO
+    {
+        // PDO attributes are integer keys: array_replace keeps them, whereas `...` would renumber them.
+        return new PDO($this->dsn(), $username, $password, array_replace([
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_TIMEOUT => config()->integer('dbnova.connection.connect_timeout'),
+        ], $options, [
+            // Always one statement per call. DBNova splits SQL itself; with multi-statements on, the
+            // server would also split on ";" that the scanner treats as one statement (inside a
+            // DELIMITER block or a /*! */ comment), and run hidden statements (security review 7b).
+            self::multiStatementsAttribute() => false,
+        ]));
+    }
+
+    private static function multiStatementsAttribute(): int
+    {
+        return defined('Pdo\\Mysql::ATTR_MULTI_STATEMENTS')
+            ? (int) constant('Pdo\\Mysql::ATTR_MULTI_STATEMENTS')
+            : (int) constant('PDO::MYSQL_ATTR_MULTI_STATEMENTS');
+    }
+
+    /**
+     * A human-readable description of where the server is, e.g. "127.0.0.1:3306".
+     */
+    public function serverLabel(): string
+    {
+        $socket = config('dbnova.connection.socket');
+
+        if (filled($socket)) {
+            return "socket {$socket}";
+        }
+
+        return config()->string('dbnova.connection.host').':'.config()->integer('dbnova.connection.port');
+    }
+
+    /**
+     * The user part of the account MySQL actually matched (CURRENT_USER()). It differs from
+     * the typed name when the login matched an anonymous ''@host account or a proxy.
+     *
+     * @throws PDOException
+     */
+    public function matchedUser(PDO $pdo): string
+    {
+        $statement = $pdo->query('SELECT CURRENT_USER()');
+        $account = $statement === false ? '' : (string) $statement->fetchColumn();
+        $at = strrpos($account, '@');
+
+        return $at === false ? $account : substr($account, 0, $at);
+    }
+
+    public static function isAccessDenied(PDOException $exception): bool
+    {
+        return in_array((int) $exception->getCode(), self::ACCESS_DENIED_CODES, true);
+    }
+
+    private function dsn(): string
+    {
+        $socket = config('dbnova.connection.socket');
+        $charset = config()->string('dbnova.connection.charset');
+
+        if (filled($socket)) {
+            return "mysql:unix_socket={$socket};charset={$charset}";
+        }
+
+        $host = config()->string('dbnova.connection.host');
+        $port = config()->integer('dbnova.connection.port');
+
+        return "mysql:host={$host};port={$port};charset={$charset}";
+    }
+}

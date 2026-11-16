@@ -40,7 +40,9 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
+            // Above the longest import (24 h): the database driver re-runs any
+            // job that is still reserved after this many seconds.
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90000),
             'after_commit' => false,
         ],
 

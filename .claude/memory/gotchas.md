@@ -1,0 +1,57 @@
+# Gotchas & Lessons Learned
+
+Append entries during and at the end of each phase. Use the format `Phase N — what happened — what to do instead`.
+
+- Phase 0 — `.gitignore` (from Boost) ignored `/.claude` and `/CLAUDE.md`. — Changed it to ignore only `/.claude/settings.local.json`, so the shared workspace is committed.
+- Phase 0 — The Bash guard hook blocks any shell command containing the text `fromShellCommandline`, even a doc-writing one. — Edit docs with the Edit/Write tools, not heredocs or scripts.
+- Phase 1 — `php artisan wayfinder:generate` without `--with-form` breaks every `.form()` call (vue-tsc errors). — Always run `php artisan wayfinder:generate --with-form`. The Vite plugin uses `formVariants: true`.
+- Phase 1 — Un-ignoring `.claude/` put its Markdown under `vp check` formatting. — Run `npm run check:fix` after editing docs, or CI fails.
+- Phase 1 — `config('x')` returns `mixed`, and Larastan level 7 can't infer `collect()` template types from it. — Use the typed accessors (`config()->array()`, `->string()`, `->integer()`).
+- Phase 1 — `PDO::query()`/`prepare()` are typed `PDOStatement|false` even with `ERRMODE_EXCEPTION`. — Handle the `false` branch explicitly instead of chaining.
+- Phase 1 — Layout props in Inertia v3 pages come from `setLayoutProps({...})` (dynamic) or `defineOptions({ layout: {...} })` (static). — Use `setLayoutProps` when breadcrumbs depend on props.
+- Phase 1 — Tests that hit authenticated routes must use `actingAsMySqlUser()` (tests/Pest.php). A plain `actingAs()` gets logged out by `EnsureMySQLCredentials`. — Use the helper.
+- Phase 1 — Never store real MySQL passwords in repo files, memory or tests. — Tests use fake values like `Secret@123` with a mocked `MySQLConnector`.
+- Phase 2 — `Factory::make()` still **persists** related models given as `User::factory()` attributes. Running it in tinker wrote a fake user into the dev SQLite DB (removed). — Never run factories against the dev DB. Use tests.
+- Phase 2 — MySQL 8 caches `information_schema` table sizes for 24 h. — `MySQLConnection` sets `information_schema_stats_expiry = 0` per session (ignored on servers without it).
+- Phase 2 — `.env.testing` replaces `.env` entirely (it would need its own `APP_KEY`). — Integration test credentials go in `.env` as `DBNOVA_TEST_DB_*`.
+- Phase 3 — `@tanstack/vue-table` is **v9**: `useTable({ features: tableFeatures({...}), columns, data })`, and sizing/resizing are opt-in features. — Read `node_modules/@tanstack/vue-table/skills/` and don't use v8 (`useVueTable`) patterns.
+- Phase 3 — In `<script setup>`, a prop named `table` and a `const table = useTable()` collide in the template. — Name the instance `dataTable`.
+- Phase 3 — `@inertiajs/core` (where `HttpResponseError` lives) isn't a direct dependency and `@inertiajs/vue3` doesn't re-export it. — `lib/httpError.ts` duck-types `error.response.data` instead.
+- Phase 3 — `env()` outside `config/` returns null once config is cached. — Test credentials live in `config('dbnova.testing.*')`.
+- Phase 3 — oxlint `no-floating-promises` fails CI on fire-and-forget calls. — Prefix with `void` when the promise already handles its own errors.
+- Phase 3 — `TrimStrings` and `ConvertEmptyStringsToNull` are global middleware that run **before routing**, so `except` callbacks using `routeIs()` never match. — Exempt data routes by path: `$request->is('databases/*/tables/*')`.
+- Phase 3 — MySQL `UPDATE` reports 0 affected rows when the value didn't change. — `MySQLConnection` enables FOUND_ROWS (`Pdo\Mysql::ATTR_FOUND_ROWS` on PHP ≥ 8.4, `PDO::MYSQL_ATTR_FOUND_ROWS` before) so 0 really means "row not found".
+- Phase 3 — **Never merge PDO options with `...$options`**: PDO attributes are integer keys, and spread renumbers them, silently remapping options onto unrelated read-only attributes. Native prepares, fetch mode and FOUND_ROWS were never applied until real-MySQL tests caught it. — Use `array_replace($defaults, $options)`. `MySQLConnectionIntegrationTest` guards this.
+- Phase 3 — Mocked-connection tests can't catch driver-level behaviour (PDO options, FOUND_ROWS, autocommit). — Always run the real-MySQL integration tests before closing a phase that touches `app/Database`.
+- Phase 4 — `useHttp<TForm>` requires form data built from FormDataConvertible values. Nested arbitrary JSON (`Record<string, unknown>`, or a recursive JSON type) fails or hits "type instantiation is excessively deep". — Use `useHttp<Record<string, never>, TResponse>()` + `http.transform(() => body)` for nested JSON bodies (see `useSchemaChange`).
+- Phase 4 — `CHANGE COLUMN` rewrites the whole definition. Anything left out (collation, comment, default) is reset. — Edit forms are built from the full `ColumnInfo` (which carries the collation), and the dialog warns about this.
+- Phase 4 — MySQL rejects an unsupported `ALGORITHM`/`LOCK` (errors 1845/1846) before doing any work, so trying INSTANT → INPLACE → COPY in sequence is safe. Pre-8.0.12 servers answer `ALGORITHM=INSTANT` with a syntax error (1064), which is treated as unsupported only on the INSTANT step.
+- Phase 5 — Unbuffered PDO results drain the whole result set on `closeCursor()`. — To stop at a row cap, `KILL QUERY` the connection from a second connection, close the cursor, then run `DO 0` to absorb a kill that lands after the query finished.
+- Phase 5 — The user's SQL must go through the text protocol (emulated prepares). Server-side prepare rejects some statements, and `?` would become a placeholder.
+- Phase 5 — InnoDB reserves auto-increment ids in batches for `INSERT … SELECT`. — Never hard-code the next id in tests.
+- Phase 5 — `SLEEP()` interrupted by `KILL QUERY` returns 1 instead of an error. Real queries fail with 1317.
+- Phase 6 — The Pint PostToolUse hook removes unused imports **after every edit**. A `use` line added in one edit, before the code that uses it, is deleted (`Class "App\Providers\RateLimiter" not found`, a missing `ImporterInterface`). — Add the import in the same edit as its first use, or add it after the code exists, then re-check `grep ^use`.
+- Phase 6 — The Bash guard also blocks Python and `cat >>` heredocs that write into `.claude/`. — Use Edit/Write for docs and config, and `sed -i ''` only for one-line fixes.
+- Phase 6 — `Exception` already has a `$line` property, so `public readonly int $line` in an exception subclass is a fatal error. — Use another name (`$statementLine`).
+- Phase 6 — Pest does **not** call dataset closures when the test parameter is typed `Closure`; it passes them as is. — Use a single closure in such datasets, not `fn () => fn () => …`.
+- Phase 6 — `ZipArchive` writes no file at all for an archive with no entries. — Tests write the 22-byte end-of-central-directory record (`"PK\x05\x06"` + 18 NUL bytes) for an empty zip.
+- Phase 6 — The database queue driver re-runs any job still reserved after `retry_after` (it was 90 s). A long import would have run twice. — `retry_after` is now 25 h, and import jobs have `tries = 1` and claim their row with a conditional `UPDATE … WHERE status = 'pending'`.
+- Phase 6 — Building a blanked "code" copy of every statement made the scanner run at 16 MB/s on real dumps (each short string in an extended INSERT cost 3 iterations + `preg_replace`). — Copy raw slices, consume a whole quoted string per step, and analyse statements on demand (`leadingTokens()`, `code()`): 103 MB/s.
+- Phase 6 — The `mysql` client and the server disagree on comments: the client treats `--` as a comment only before whitespace, while the server also accepts control characters. Imports are split by the **client**, so the scanner follows the client's rule. Checked against 8.0.39: `--x` lines and `delimiter` mid-statement are **not** special in that client (the security reviewer expected otherwise). Verify parser assumptions against the real binary (`--force` + SELECT markers) rather than from memory of `mysql.cc`.
+- Phase 6 — `trim()` on a statement ending in `-- comment` means a re-emitted `;` would land inside the comment. — The import pump must put the delimiter on a new line when the statement's last line has a comment.
+- Phase 6 — With binary logging on, creating triggers or functions without SUPER fails with error 1419 (`log_bin_trust_function_creators`), even without a DEFINER clause. The `dbnova_test` account hits this. — Import integration tests use procedures (allowed) instead of triggers; preflight warns about DEFINER and routines.
+- Phase 6 — Laravel's `InvokedProcess` contract has no `stop()`. — `ProcessRunner::terminate()` sends SIGTERM, waits up to 5 s, then sends SIGKILL.
+- Phase 7 — `npx prettier` is not this repo's formatter. It reformats Vue files with double quotes. — Use `npx vp fmt <paths>` / `npm run check` (Vite+).
+- Phase 7 — PHPStan narrows `$process->isRunning()` to a constant after the first call in the same scope. — Put SIGTERM/SIGKILL loops in their own method, or use Symfony's `$process->stop($timeout, SIGKILL)`.
+- Phase 7 — `KILL QUERY` on a `SELECT SLEEP(n)` makes it return 1 instead of failing, so it can't simulate a cancelled query. A `/*+ MAX_EXECUTION_TIME(ms) */` hint on a heavy cross join gives a real mid-query error. — Use that in tests.
+- Phase 7 — Never `pcntl_fork()` inside a test that holds an open PDO connection. The child's exit tears down shared state, and its `afterEach` never runs, so it leaves `dbnova_test_*` databases behind. — Simulate from one process instead.
+- Phase 7 — Pest has no `->before()` on a test. — Put the setup in the test body or a `beforeEach`.
+- Phase 8 — `Threads_running` counts MySQL's background threads (e.g. the event scheduler) but `Threads_connected` doesn't, so "running" can exceed "connected". — Label both series honestly and explain it on the chart.
+- Phase 8 — A running prepared statement shows `Command = Execute`, not `Query`, in the process list. Both are "running a statement". — Offer Stop query for either.
+- Phase 8 — A new Inertia page fails page tests with "Not a valid Inertia response" (actually a 500: "Unable to locate file in Vite manifest") until the frontend is rebuilt. — Run `npm run build` after adding a page, before running its tests.
+- Phase 8 — `CHECK TABLE` can't be a server-side prepared statement, but OPTIMIZE/ANALYZE/REPAIR can. — Run maintenance with `PDO::query` on catalog-checked, quoted names.
+- Phase 8 — A new secondary index shows `INDEX_LENGTH = 0` until InnoDB's persistent statistics refresh. — Run `ANALYZE TABLE` before asserting sizes in tests.
+- Phase 8 — InnoDB's `DATA_FREE` is a few MB (free extents) even on a freshly built table. — Don't promise OPTIMIZE will reclaim it; label it "allocated but unused".
+- Phase 9 — Laravel's `throttle:N,1` keys on the signed-in user only, so every route using it shares one counter (edits used up the 5/min drop-database budget). — Always add a per-route prefix: `throttle:N,1,<route name>`. `RouteThrottleTest` enforces it.
+- Phase 9 — PHP exception traces keep call arguments, and Laravel logs the previous exception's trace. A failed PDO connect logged the password. — Mark every credential parameter `#[\SensitiveParameter]`.
+- Phase 0 — `mysql` on PATH is a shell alias. — Always resolve binaries from config, never from `PATH` lookups that rely on the interactive shell.

@@ -1,0 +1,121 @@
+# Security
+
+DBNova is effectively a superuser console for a MySQL server. Its threat model assumes anyone who gets into the app can do anything the configured MySQL user can do.
+
+## Authentication & access
+
+- Users sign in with a **MySQL username and password** (ADR 0008), which DBNova checks by connecting to the configured server. MySQL grants decide what they can do.
+- There are no app accounts. Registration, password reset, email verification, 2FA and passkeys are removed. Fortify login throttling (5/min per username + IP) is kept.
+- "Remember me" is not offered, because a remembered session would have no MySQL credentials.
+- **The account must match the name** (security review 9, MEDIUM-1). After connecting, `verify()` reads `CURRENT_USER()`; a login MySQL matched to a different account is refused. That covers an anonymous `''@host` account or a proxy user. Without the check, the anonymous account's password typed with the name "admin" would have opened admin's exports and history.
+- **Password guessing is limited per MySQL username:** 10 failures per minute (`AuthenticateMySQLUser::MAX_FAILURES_PER_MINUTE`). The limit sits inside `verify()`, so it covers login, Fortify password confirmation and every "re-enter your password" dialog (security review 9, MEDIUM-2). Fortify's login throttle (5/min per username + IP) still applies on top.
+- All app routes sit behind `auth` + `verified` middleware. A feature test asserts that every non-auth route requires auth.
+- Session lifetime is configurable.
+- Dropping a database requires typing its exact name **and** re-entering the MySQL password in the same dialog (`DropDatabaseRequest` checks the password against MySQL). The import "drop & recreate" action follows the same pattern. Fortify's `password.confirm` page is also MySQL-backed, for flows that redirect.
+
+## MySQL credentials
+
+- `.env` holds only **where** the server is (`DBNOVA_DB_HOST/PORT/SOCKET`), never a username or password.
+- The signed-in user's credentials live in their session, encrypted with `Crypt` (`MySQLCredentialStore`), and the session is encrypted too (`SESSION_ENCRYPT=true`). They're discarded on logout and session expiry. `EnsureMySQLCredentials` signs out sessions that lack them.
+- Queued jobs (Phases 6 and 7) store the dispatching user's credentials encrypted on the job row and wipe them when the job reaches a terminal state.
+- `users` rows never contain a password.
+- They're given to the CLI only through a temporary `--defaults-extra-file` (mode 0600, under `storage/app/dbnova/tmp`, deleted in `finally`). They're **never** put in argv (visible in `ps`) and never in `MYSQL_PWD` (deprecated).
+- Option files are read line by line, so a value containing CR, LF or NUL would start a new option. For example, the password `x⏎result-file=/path` makes mysqldump write over any file the worker can write. Quoting can't stop this. `DefaultsFile` therefore **refuses** such usernames, passwords, hosts and socket paths, without echoing the value, and login refuses them too. Any MySQL user can set such a password for themselves, so this is the real control. (Security review 7a, HIGH-1, verified against mysqldump 8.0.39.)
+- They're never logged, never serialized into job payloads (jobs hold only IDs), and never sent to the frontend.
+- **Stack traces:** PHP records call arguments in exception traces, and Laravel writes the trace of the "previous" exception to `laravel.log`. Every parameter that carries a password or a credentials array is therefore marked `#[\SensitiveParameter]`:
+    - `MySQLConnector::connect`, `MySQLConnection::useCredentials`, `AuthenticateMySQLUser::verify`, `MySQLCredentialStore::store`;
+    - `DefaultsFile`, `ProcessRunner` and the export/import request DTOs.
+    - Before this, a failed connect logged `connect('user', 'password', …)` (security review 9, HIGH-1). `tests/Feature/Security/CredentialLeakTest.php` formats real failures with Monolog and asserts the password is absent. INSTALL.md also recommends `zend.exception_ignore_args=On`.
+- Recommended setup: a dedicated MySQL user with the required grants (see INSTALL.md) rather than `root`.
+
+## Injection
+
+- **SQL values** are always bound parameters through PDO with native prepares.
+- **SQL identifiers** go through `IdentifierQuoter` only: backtick-quoted, backticks doubled, and NUL, invalid UTF-8, characters outside the BMP (emoji), a trailing space and length > 64 are rejected. `EnsureValidRouteNames` returns 404 for such `{database}`/`{table}` route parameters before any lookup (Phase 9 fuzzing found 503s on emoji and trailing-space names). `IdentifierFuzzTest` replays 16 hostile names against 15 endpoints on real MySQL with a canary database. Where possible, identifiers are checked against the actual catalog (`information_schema`) first.
+- **Shell:** arrays only for Symfony Process. No `fromShellCommandline`, `exec` or `shell_exec`. Binary paths come from config and are validated as executable files.
+- **The SQL editor** runs arbitrary SQL by design. It's protected by auth, the audit log, read-only mode and CSRF.
+
+## Uploads & files
+
+- Uploads are stored under UUID paths, and the original filename is metadata only.
+- Uploads (Phase 6a) are owned by the MySQL account that started them. Another user's upload or import returns 404. Files are mode 0600 in 0700 directories. Chunk PUTs are rate-limited per user, and a chunk of the wrong length is refused and not recorded.
+- ZIP: entries with `..` segments, absolute or drive paths, NUL bytes, symlinks or encryption are rejected. Exactly one file (a `.sql`) is allowed; `__MACOSX/` and `._*` metadata are ignored. Nothing is ever extracted to disk: the entry is streamed, so a zip bomb can't fill the disk, and reads are bounded per call. Gzip is inflated in 8 KB compressed steps, so one step can't explode memory.
+- The `mysql` client that runs imports (6b) always gets `--binary-mode` (client commands such as `\!` shell and `source` are disabled in piped input) and `--local-infile=0` (a dump can't read files on the DBNova host). Dump files are untrusted input.
+- **The "one database" rule is a best-effort guard, not a security boundary.** The real boundary is the MySQL account's grants: import with an account limited to the target database when the dump is untrusted. The guard (`MySQLDumpPolicy`, run on every statement in preflight) does three things:
+    - Accepts only the statement kinds that dump tools write: SET, INSERT/REPLACE, CREATE/ALTER/DROP of tables, views, routines, triggers, events and indexes, LOCK/UNLOCK, TRUNCATE, START TRANSACTION/COMMIT, and the database statements it skips. UPDATE, DELETE, SELECT, CALL, RENAME, LOAD DATA, GRANT and the rest are refused; they belong in the SQL editor.
+    - Refuses database-qualified names in every table-name position (including DROP/LOCK lists, `CREATE INDEX … ON`, `CREATE TRIGGER … ON`), plus `ALTER TABLE … RENAME/EXCHANGE`.
+    - Refuses text the `mysql` client would split differently from DBNova's scanner: a backslash outside strings (client commands such as `\C`), the delimiter inside `/*! … */`, `delimiter` at the start of a line in the middle of a statement, `NO_BACKSLASH_ESCAPES`, and big5/cp932/gb18030/gbk/sjis charsets. The scanner follows the client's comment rule (`--` + whitespace only); this was checked against the real 8.0.39 client.
+    - Routine, trigger and view **bodies** are not inspected (they run later, with the definer's or caller's rights).
+    - The `mysql` client always enables multi-statements, so under `DELIMITER ;;` a `;` inside one client statement makes MySQL run several. A `;` in code under a non-`;` delimiter is **refused**, except in CREATE PROCEDURE/FUNCTION/TRIGGER/EVENT. Those "compound programs" can't be checked (anything after the body's END also runs), so preflight counts them and **Start requires the user to confirm they trust the dump**; without it the pump refuses them. (Security review 6b, F1.)
+    - `DELIMITER` arguments must be 1–16 characters with no quotes, backslash or whitespace (the client strips quotes and refuses backslashes, so the split would differ). Whitespace before a multi-character delimiter is kept when re-emitting. (F2, F3.)
+- Import credentials: stored encrypted on the import at Start, read by the worker and **wiped as soon as the `mysql` client has them**. A queued import that no worker starts within `session.lifetime` is failed and wiped by `dbnova:recover-jobs`. The temporary `.cnf` is deleted in `finally`; one left by a SIGKILLed worker is deleted by `dbnova:prune-temp` after 1 h.
+- "Drop & recreate target" requires the typed name and the MySQL password, is throttled (5/min; so is dropping a database), and is refused while another import into that database is queued or running, or while MySQL is still running statements there (`busySessionCount`, e.g. a `mysql` client orphaned by a killed worker).
+- Security review 2026-11-13 (Phase 6a) found the original leading-token check bypassable (`RENAME TABLE a TO other.a`, `DROP TABLE a, other.b`, `--\x01;USE other`); the policy above replaced it.
+- Exports (7a):
+    - `mysqldump` gets database and table names only after `--`, and only after they have been checked against the catalog.
+    - Credentials go on the export row encrypted and are wiped as soon as the worker has read them.
+    - Files use UUID paths (mode 0600, opened with `x`), and a failed, cancelled or interrupted export deletes its partial file.
+    - Downloads need a temporary signed URL (≤ `export_link_minutes`, never past the file's expiry) **and** the signed-in owner. The response is `Cache-Control: no-store`, and the download filename keeps only `[A-Za-z0-9_.-]`.
+    - Read-only mode allows exports.
+    - The `mysql` system database can be exported, because what a user can dump is decided by their MySQL grants.
+- **One statement per connection call** (security review 7b, HIGH-1).
+    - Every PDO connection is opened with `ATTR_MULTI_STATEMENTS = false` in `MySQLConnector`, after any caller options, so it can't be switched back on.
+    - With multi-statements on, the server split on `;` that DBNova's scanner treats as part of one statement: inside a `DELIMITER $$ … $$` block, or inside a `/*! … */` comment. A "single SELECT" could then carry `COMMIT; DELETE …`. The reviewer reproduced it against MySQL 8.0.39 in two places:
+        - the CSV query export, where `COMMIT` ended the read-only transaction;
+        - the SQL editor in read-only mode, where `SET SESSION TRANSACTION READ WRITE` undid the guard. It also bypassed the destructive-statement confirmation.
+    - Regression tests replay both payloads, and fail if multi-statements are turned back on.
+- CSV exports (7b):
+    - **Query exports** must pass `SqlStatement::exportProblem()`:
+        - one statement;
+        - a read-only keyword (not USE or HELP);
+        - delimiter `;`, with no `;` anywhere in the code (conditional comments count as code);
+        - no `FOR UPDATE`, `FOR SHARE`, `LOCK IN SHARE MODE` or `INTO`. Locking clauses would block the application's writes for the whole export, and `INTO` writes a server file or a variable.
+    - The worker also runs `SET SESSION TRANSACTION READ ONLY` plus `START TRANSACTION READ ONLY`, and resets the session afterwards.
+    - **Cancel** sends `KILL QUERY` only for the owner's own export, only while it is running, and only to the connection id stored on that export (never one from the request). It runs as the same MySQL account.
+    - **Logging:** the audit log never stores a query's text. A failed query export is audited as "The query export failed." because MySQL errors quote the SQL. The statement is deleted from `export_jobs` when the file is deleted or expires.
+    - **Spreadsheet formulas:** CSV is exact by default. The opt-in **Safe for spreadsheets** option (`options.spreadsheetSafe`) prefixes text starting with `=`, `+`, `-`, `@`, tab or CR with `'` (OWASP CSV injection guidance). Numeric strings such as DECIMAL `-12.50` are left alone. SQL-editor query exports are always exact.
+    - **Disk use:** a user may run at most 3 exports at once and keep at most `DBNOVA_MAX_KEPT_EXPORTS` (10) unexpired finished files; further exports are refused (429) until files are deleted or expire. This closes 7b LOW-2. The cap check and the insert run under a per-user `Cache::lock`, so parallel requests can't all pass (review 9, LOW-3).
+    - **Known limit:** a query still running in MySQL when its worker dies, or when recovery marks it interrupted, isn't killed; nobody holds credentials at that point. MySQL finishes it or the DBA kills it under Processes. The heartbeat lease is capped at 4 h.
+
+## Server processes (Phase 8a)
+
+- MySQL decides which threads are listed and killable. Without PROCESS, an account sees only its own threads, and without CONNECTION_ADMIN or SUPER it can only kill its own. DBNova adds nothing on top.
+- Kill needs a confirmation (`confirm: true`, enforced on the server), is throttled (30/min), is blocked by read-only mode **in the adapter**, refuses DBNova's own connection, and is audited (`process.kill-query` / `process.kill`) with the target's id, user, command and time. The SQL is not stored.
+- The id is validated as a number in the route and cast to int before `KILL`, which takes no placeholders.
+
+## Table maintenance, audit viewer and preferences (Phase 8b)
+
+- **Maintenance** (`OPTIMIZE`, `ANALYZE`, `CHECK`, `REPAIR TABLE`). `REPAIR` needs `confirm: true`, because it can drop unreadable MyISAM rows (review 9, LOW-4).
+    - Table names must be base tables in the catalog of that database before they are quoted into the statement. Views and unknown names are refused.
+    - At most 200 tables per request, throttled at 30/min.
+    - Read-only mode refuses everything except `CHECK`, which only reads.
+    - Changes are audited (`table.optimize` etc.) with the table list and how many tables MySQL reported errors for. `CHECK` is not audited.
+- **Audit viewer:**
+    - Every account sees its own entries.
+    - Accounts holding the global `CREATE USER` privilege see everyone's: they can already create or alter any account.
+    - The check reads `information_schema.USER_PRIVILEGES` for `CURRENT_USER()`. If it fails, the account falls back to its own entries.
+    - A `user` filter from a non-privileged account is ignored, so it can't reveal other accounts' entries.
+    - Privileges that come only from a role are not seen, which fails closed.
+- **Preferences:**
+    - Per user, stored in `users.preferences`, and applied per request by `ApplyUserPreferences`.
+    - Validated against `.env` maximums (`DBNOVA_MAX_*`), and clamped again when applied in case a maximum is lowered later.
+    - Queued jobs never pass through the middleware and keep the `.env` values.
+
+## Web
+
+- CSRF on all state-changing requests (Laravel default, including chunk PUTs).
+- Every state-changing route has its own rate limit: `throttle:N,1,<route name>`. The prefix matters: Laravel's plain `throttle:N,1` keys on the user only, so all such routes would share one counter. `RouteThrottleTest` enforces both rules.
+- `local` storage has `'serve' => false`: DBNova never serves files from `storage/app`.
+- No user-controlled HTML is rendered. Grid cells are rendered as text.
+
+## Read-only mode
+
+`DBNOVA_READ_ONLY=true` makes `ReadOnlyGuard` throw on every mutating adapter method. The SQL editor only allows statements whose first keyword is in a whitelist (SELECT, SHOW, DESCRIBE, EXPLAIN), determined by `SqlStreamScanner`, and the session runs `SET SESSION TRANSACTION READ ONLY` as defence in depth.
+
+## Audit log
+
+`audit_logs` (SQLite) records the actor (user + MySQL username), action, database, table, details, result (with the error) and IP. Stored errors pass through `AuditLogger::redact()`, which replaces every quoted literal with `'…'` (and everything after `near '` in syntax errors), because MySQL errors quote SQL, passwords (`ALTER USER … IDENTIFIED BY`) and row values (`Duplicate entry '…'`) (security review 9, LOW-1). The user who ran the statement still sees the full error. It covers every DDL, every row change from the grid, imports, exports and drops. **Row values are never stored**: row changes record column names and row counts only, because table data may be sensitive.
+
+## Review checklist
+
+See the `.claude/skills/dbnova-security-review/SKILL.md` skill, which runs at the end of every phase.

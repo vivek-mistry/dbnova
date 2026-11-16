@@ -1,6 +1,17 @@
 <?php
 
+use App\Database\Adapters\MySQL\MySQLImporter;
+use App\Database\Contracts\DatabaseAdapterInterface;
+use App\Database\Contracts\ExporterInterface;
+use App\Database\Contracts\QueryExecutorInterface;
+use App\Database\Contracts\RecordManagerInterface;
+use App\Database\Contracts\SchemaManagerInterface;
+use App\Database\Contracts\TableBrowserInterface;
+use App\Database\Contracts\TableManagerInterface;
+use App\Models\User;
+use App\Services\Auth\MySQLCredentialStore;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Mockery\MockInterface;
 use Tests\TestCase;
 
 /*
@@ -44,7 +55,71 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
+/**
+ * Sign in as a DBNova user whose session holds MySQL credentials, as it
+ * would after a successful login.
+ */
+function actingAsMySqlUser(?User $user = null, string $password = 'secret'): User
 {
-    // ..
+    $user ??= User::factory()->create();
+
+    test()->actingAs($user)->withSession([]);
+    app(MySQLCredentialStore::class)->store($user->username, $password);
+
+    return $user;
+}
+
+/**
+ * Replace the managed-database adapter with one whose schema manager is a mock.
+ */
+function fakeSchemaManager(): MockInterface
+{
+    return fakeDatabaseAdapter()['schema'];
+}
+
+/**
+ * Replace the managed-database adapter with one whose schema manager, table
+ * browser, record manager, table manager and query executor are mocks.
+ *
+ * @return array{schema: MockInterface, browser: MockInterface, records: MockInterface, tables: MockInterface, queries: MockInterface, exporter: MockInterface}
+ */
+function fakeDatabaseAdapter(): array
+{
+    $schema = Mockery::mock(SchemaManagerInterface::class);
+    $browser = Mockery::mock(TableBrowserInterface::class);
+    $records = Mockery::mock(RecordManagerInterface::class);
+    $tables = Mockery::mock(TableManagerInterface::class);
+    $queries = Mockery::mock(QueryExecutorInterface::class);
+    $exporter = Mockery::mock(ExporterInterface::class);
+    $exporter->shouldReceive('estimateBytes')->andReturn(1024)->byDefault();
+    $tables->shouldReceive('columnTypes')->andReturn(['int', 'varchar', 'text'])->byDefault();
+    $tables->shouldReceive('engines')->andReturn(['InnoDB'])->byDefault();
+    $tables->shouldReceive('foreignKeys')->andReturn([])->byDefault();
+
+    test()->mock(DatabaseAdapterInterface::class, fn (MockInterface $adapter) => $adapter
+        ->shouldReceive('schema')->andReturn($schema)
+        ->shouldReceive('browser')->andReturn($browser)
+        ->shouldReceive('records')->andReturn($records)
+        ->shouldReceive('tables')->andReturn($tables)
+        ->shouldReceive('queries')->andReturn($queries)
+        // Preflight only reads files, so the real importer is safe to use.
+        ->shouldReceive('importer')->andReturn(app(MySQLImporter::class))
+        ->shouldReceive('exporter')->andReturn($exporter));
+
+    return ['schema' => $schema, 'browser' => $browser, 'records' => $records, 'tables' => $tables, 'queries' => $queries, 'exporter' => $exporter];
+}
+
+/**
+ * Credentials for integration tests against a real MySQL server, or null
+ * when DBNOVA_TEST_DB_USERNAME is not configured.
+ *
+ * @return array{username: string, password: string}|null
+ */
+function mySqlTestCredentials(): ?array
+{
+    $username = config('dbnova.testing.username');
+
+    return is_string($username) && $username !== ''
+        ? ['username' => $username, 'password' => (string) config('dbnova.testing.password')]
+        : null;
 }

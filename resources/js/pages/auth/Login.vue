@@ -1,28 +1,24 @@
 <script setup lang="ts">
 import { Form, Head } from '@inertiajs/vue3';
+import { ArrowRight, Lock, ShieldCheck, User } from '@lucide/vue';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
-import TextLink from '@/components/TextLink.vue';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
-import { register } from '@/routes';
 import { store } from '@/routes/login';
-import { request } from '@/routes/password';
-import PasskeyVerify from '@/components/PasskeyVerify.vue';
 
 defineOptions({
     layout: {
-        title: 'Log in to your account',
-        description: 'Enter your email and password below to log in',
+        title: 'Welcome back',
+        description: 'Sign in with your MySQL username and password',
     },
 });
 
 defineProps<{
+    server: string;
     status?: string;
-    canResetPassword: boolean;
 }>();
 </script>
 
@@ -36,75 +32,79 @@ defineProps<{
         {{ status }}
     </div>
 
-    <PasskeyVerify />
-
     <Form
         v-bind="store.form()"
         :reset-on-success="['password']"
         v-slot="{ errors, processing }"
-        class="flex flex-col gap-6"
+        class="flex flex-col gap-5"
     >
-        <div class="grid gap-6">
-            <div class="grid gap-2">
-                <Label for="email">Email address</Label>
-                <Input
-                    id="email"
-                    type="email"
-                    name="email"
-                    required
-                    v-focus
-                    :tabindex="1"
-                    autocomplete="email"
-                    placeholder="email@example.com"
-                />
-                <InputError :message="errors.email" />
-            </div>
+        <div
+            class="flex items-center justify-center gap-2 rounded-full border bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground"
+            data-test="mysql-server"
+        >
+            <span class="size-1.5 rounded-full bg-emerald-500" />
+            <span>MySQL server</span>
+            <span class="font-mono text-foreground">{{ server }}</span>
+        </div>
 
-            <div class="grid gap-2">
-                <div class="flex items-center justify-between">
-                    <Label for="password">Password</Label>
-                    <TextLink
-                        v-if="canResetPassword"
-                        :href="request()"
-                        class="text-sm"
-                        :tabindex="5"
-                    >
-                        Forgot your password?
-                    </TextLink>
-                </div>
+        <div class="grid gap-2">
+            <Label for="username">Username</Label>
+            <div class="relative">
+                <User
+                    class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+                />
+                <Input
+                    id="username"
+                    type="text"
+                    name="username"
+                    required
+                    autofocus
+                    :tabindex="1"
+                    autocomplete="username"
+                    autocapitalize="none"
+                    spellcheck="false"
+                    placeholder="root"
+                    class="h-10 pl-9"
+                />
+            </div>
+            <InputError :message="errors.username" />
+        </div>
+
+        <div class="grid gap-2">
+            <Label for="password">Password</Label>
+            <div class="relative">
+                <Lock
+                    class="pointer-events-none absolute top-1/2 left-3 z-10 size-4 -translate-y-1/2 text-muted-foreground"
+                />
                 <PasswordInput
                     id="password"
                     name="password"
-                    required
                     :tabindex="2"
                     autocomplete="current-password"
-                    placeholder="Password"
+                    placeholder="••••••••"
+                    class="h-10 pl-9"
                 />
-                <InputError :message="errors.password" />
             </div>
-
-            <div class="flex items-center justify-between">
-                <Label for="remember" class="flex items-center space-x-3">
-                    <Checkbox id="remember" name="remember" :tabindex="3" />
-                    <span>Remember me</span>
-                </Label>
-            </div>
-
-            <Button
-                type="submit"
-                class="mt-4 w-full"
-                :tabindex="4"
-                :disabled="processing"
-                data-test="login-button"
-            >
-                <Spinner v-if="processing" />
-                Log in
-            </Button>
+            <InputError :message="errors.password" />
         </div>
 
-        <div class="text-center text-sm text-muted-foreground">
-            Don't have an account?
-            <TextLink :href="register()" :tabindex="5">Sign up</TextLink>
-        </div>
+        <Button
+            type="submit"
+            class="mt-1 h-10 w-full"
+            :tabindex="3"
+            :disabled="processing"
+            data-test="login-button"
+        >
+            <Spinner v-if="processing" />
+            Log in
+            <ArrowRight v-if="!processing" />
+        </Button>
+
+        <p
+            class="flex items-center justify-center gap-1.5 text-xs text-muted-foreground"
+        >
+            <ShieldCheck class="size-3.5 shrink-0" />
+            Your password stays encrypted in your session.
+        </p>
     </Form>
 </template>
