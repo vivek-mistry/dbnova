@@ -1,12 +1,12 @@
 # DBNova
 
-[![CI](https://github.com/vivek-mistry/dbnova/actions/workflows/ci.yml/badge.svg)](https://github.com/vivek-mistry/dbnova/actions/workflows/ci.yml)
+[![CI](https://github.com/vivek-mistry/dbnova/actions/workflows/ci.yml/badge.svg)](https://github.com/vivek-mistry/dbnova/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/vivek-mistry/dbnova)](https://github.com/vivek-mistry/dbnova/releases)
 
 A self-hosted MySQL manager: a faster, more trustworthy alternative to phpMyAdmin.
 
 DBNova manages **one MySQL server** running on the same machine or VPS. You sign in with a MySQL account, and that account's grants decide what you can do. It's built for everyday browsing and for importing and exporting production-sized databases (10 GB and more) without running out of memory.
 
-> **Status:** in active development. Phases 0–9 (through monitoring and security/performance hardening) are done. Next up: the 1.0 release with a finished install guide. See [Roadmap](#roadmap).
+> **Status:** version 1.0.0. See the [changelog](CHANGELOG.md) and the [Roadmap](#roadmap).
 
 ## Features
 
@@ -207,7 +207,11 @@ DBNova is effectively a superuser console for your MySQL server, so:
 - Remove anonymous MySQL accounts (`mysql_secure_installation`). DBNova refuses sign-ins that MySQL matches to a different account, but the server shouldn't have them anyway.
 - In production, set `zend.exception_ignore_args = On` in php.ini.
 
-The threat model and the safeguards are documented in [`.claude/docs/SECURITY.md`](.claude/docs/SECURITY.md).
+The threat model and the safeguards are documented in [`.claude/docs/SECURITY.md`](.claude/docs/SECURITY.md). To report a vulnerability privately, see [SECURITY.md](SECURITY.md).
+
+## Contributing
+
+`main` is protected. Changes arrive as pull requests that must pass CI (code quality and the MySQL test suite) and be approved by the maintainer before they can merge.
 
 ## License
 

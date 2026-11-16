@@ -1,12 +1,26 @@
+# Weekly dependency updates (security fixes arrive as soon as they are published).
+# Each update is a pull request that must pass CI and get the owner's review.
 version: 2
 updates:
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  - package-ecosystem: composer
+    directory: /
     schedule:
-      interval: "weekly"
-    cooldown:
-      default-days: 5
+      interval: weekly
+    open-pull-requests-limit: 5
     groups:
-      github-actions:
-        patterns:
-          - "*"
+      composer-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

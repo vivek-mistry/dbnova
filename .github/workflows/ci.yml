@@ -66,6 +66,11 @@ jobs:
       - name: Frontend types
         run: npm run types:check
 
+      - name: Dependency audit (known vulnerabilities)
+        run: |
+          composer audit --no-dev
+          npm audit --omit=dev --audit-level=high
+
   tests:
     name: Tests
     runs-on: ubuntu-latest
